@@ -23,6 +23,7 @@
       border: none;
       border-radius: 6px;
       cursor: pointer;
+      margin: 10px;
     }
 
     button:hover {
@@ -37,11 +38,18 @@
 
   <button onclick="showMessage()">Click Me</button>
 
+  <!-- New Button -->
+  <button onclick="showAlert()">New Button</button>
+
   <p id="message"></p>
 
   <script>
     function showMessage() {
       document.getElementById("message").innerText = "JavaScript is working!";
+    }
+
+    function showAlert() {
+      alert("This button was added from the feature branch!");
     }
   </script>
 

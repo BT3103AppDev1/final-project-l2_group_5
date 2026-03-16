@@ -53,35 +53,13 @@
           </div>
         </div>
 
-        <!-- Right Panel: Sign Up Form -->
+        <!-- Right Panel: Sign In Form -->
         <div class="right-panel">
-          <h3 class="form-title">Create your account</h3>
-
-          <!-- Full Name -->
-          <div class="field-group">
-            <label class="field-label">Full Name</label>
-            <input
-              v-model="fullName"
-              type="text"
-              class="field-input"
-              placeholder="John Doe"
-            />
-          </div>
-
-          <!-- Company Name (HR Only) -->
-          <div v-if="role === 'hr'" class="field-group">
-            <label class="field-label">Company Name</label>
-            <input
-              v-model="companyName"
-              type="text"
-              class="field-input"
-              placeholder="Your Company"
-            />
-          </div>
+          <h3 class="form-title">Sign in to your account</h3>
 
           <!-- Email -->
           <div class="field-group">
-            <label class="field-label">{{ role === 'hr' ? 'Work Email' : 'Email' }}</label>
+            <label class="field-label">Work Email</label>
             <input
               v-model="email"
               type="email"
@@ -105,33 +83,19 @@
                 <svg v-else xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
               </button>
             </div>
-          </div>
-
-          <!-- Confirm Password -->
-          <div class="field-group">
-            <label class="field-label">Confirm Password</label>
-            <div class="password-wrapper">
-              <input
-                v-model="confirmPassword"
-                :type="showConfirmPassword ? 'text' : 'password'"
-                class="field-input"
-                placeholder="••••••••"
-              />
-              <button class="eye-btn" @click="showConfirmPassword = !showConfirmPassword" type="button">
-                <svg v-if="!showConfirmPassword" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                <svg v-else xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-              </button>
+            <div class="forgot-row">
+              <a href="#" class="forgot-link">Forgot password?</a>
             </div>
           </div>
 
           <!-- Submit -->
-          <button class="submit-btn" @click="handleSignUp">
-            Sign Up &rarr;
+          <button class="submit-btn" @click="handleSignIn">
+            Sign In &rarr;
           </button>
 
-          <p class="login-prompt">
-            Already have an account?
-            <a href="#" @click.prevent="goToLogin" class="login-link">Sign in</a>
+          <p class="signup-prompt">
+            Don't have an account?
+            <router-link to="/signup" class="signup-link">Sign up</router-link>
           </p>
         </div>
       </div>
@@ -140,89 +104,59 @@
 </template>
 
 <script>
-import { createUserWithEmailAndPassword } from 'firebase/auth'
-import { setDoc, doc } from 'firebase/firestore'
+import { signInWithEmailAndPassword } from 'firebase/auth'
+import { getDoc, doc } from 'firebase/firestore'
 import { auth, db } from '@/firebaseConfig'
+import { useRouter } from 'vue-router'
 
 export default {
-  name: 'SignUp',
-  props: {
-    initialRole: {
-      type: String,
-      default: 'candidate'
+  name: 'LoginPage',
+  setup() {
+    return {
+      router: useRouter()
     }
   },
   data() {
     return {
-      role: this.initialRole,
-      fullName: '',
-      companyName: '',
+      role: 'hr',
       email: '',
       password: '',
-      confirmPassword: '',
       showPassword: false,
-      showConfirmPassword: false,
       isLoading: false,
     }
   },
   methods: {
-    async handleSignUp() {
-      if (this.role === 'hr') {
-        if (!this.fullName || !this.companyName || !this.email || !this.password || !this.confirmPassword) {
-          alert('Please fill in all fields.')
-          return
-        }
-      } else {
-        if (!this.fullName || !this.email || !this.password || !this.confirmPassword) {
-          alert('Please fill in all fields.')
-          return
-        }
-      }
-      if (this.password !== this.confirmPassword) {
-        alert('Passwords do not match.')
+    async handleSignIn() {
+      if (!this.email || !this.password) {
+        alert('Please fill in all fields.')
         return
       }
-
+      
       this.isLoading = true
       try {
-        // Create user with email and password
-        const userCredential = await createUserWithEmailAndPassword(auth, this.email, this.password)
+        const userCredential = await signInWithEmailAndPassword(auth, this.email, this.password)
         const user = userCredential.user
 
-        // Save user details to Firestore
+        // Fetch user's own data from Firestore
         const userRef = doc(db, 'users', user.uid)
-        const userData = {
-          uid: user.uid,
-          fullName: this.fullName,
-          email: this.email,
-          role: this.role,
-          createdAt: new Date(),
-        }
-
-        // Add company name for HR users
-        if (this.role === 'hr') {
-          userData.companyName = this.companyName
-        }
-
-        await setDoc(userRef, userData)
+        const userSnapshot = await getDoc(userRef)
         
-        console.log('User signed up:', user)
-        alert(`Account created successfully as ${this.role === 'hr' ? 'HR' : 'Candidate'}`)
-        // You can redirect to dashboard or login page here
+        if (userSnapshot.exists()) {
+          const userData = userSnapshot.data()
+          console.log('User signed in:', userData)
+          alert(`Signed in successfully as ${userData.role === 'hr' ? 'HR' : 'Candidate'}`)
+          // Redirect to appropriate dashboard based on role
+          const dashboardRoute = userData.role === 'hr' ? '/hr-dashboard' : '/candidate-dashboard'
+          this.router.push(dashboardRoute)
+        } else {
+          alert('User profile not found.')
+        }
       } catch (error) {
-        console.error('Sign up error:', error.message)
-        alert(`Sign up failed: ${error.message}`)
+        console.error('Sign in error:', error.message)
+        alert(`Sign in failed: ${error.message}`)
       } finally {
         this.isLoading = false
       }
-    },
-    goToLogin() {
-      this.$emit('switch-to-login', this.role)
-    }
-  },
-  watch: {
-    initialRole(newRole) {
-      this.role = newRole
     }
   }
 }
@@ -250,12 +184,12 @@ export default {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 32px;
-  background: #fff;
-  border-bottom: 1px solid #e5e7eb;
-  position: sticky;
-  top: 0;
-  z-index: 10;
+  padding: 14px 32px;   /* ← add this */
+  background: #fff;      /* ← add this */
+  border-bottom: 1px solid #e5e7eb;  /* ← add this */
+  position: sticky;      /* ← add this */
+  top: 0;                /* ← add this */
+  z-index: 10;           /* ← add this */
 }
 
 .brand {
@@ -300,6 +234,17 @@ export default {
   color: #fff;
   box-shadow: 0 1px 3px rgba(0,0,0,0.15);
 }
+
+.back-link {
+  font-size: 0.875rem;
+  color: #374151;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.back-link:hover { color: #1a237e; }
 
 /* ---- Main ---- */
 .main {
@@ -446,8 +391,6 @@ export default {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  overflow-y: auto;
-  max-height: 660px;
 }
 
 .form-title {
@@ -509,6 +452,20 @@ export default {
 
 .eye-btn:hover { color: #374151; }
 
+.forgot-row {
+  text-align: right;
+  margin-top: 6px;
+}
+
+.forgot-link {
+  font-size: 0.8rem;
+  color: #1a237e;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.forgot-link:hover { text-decoration: underline; }
+
 .submit-btn {
   width: 100%;
   padding: 13px;
@@ -527,18 +484,18 @@ export default {
 .submit-btn:hover { background: #151b60; }
 .submit-btn:active { transform: scale(0.99); }
 
-.login-prompt {
+.signup-prompt {
   text-align: center;
   font-size: 0.875rem;
   color: #6b7280;
   margin-top: 20px;
 }
 
-.login-link {
+.signup-link {
   color: #1a237e;
   font-weight: 600;
   text-decoration: none;
 }
 
-.login-link:hover { text-decoration: underline; }
+.signup-link:hover { text-decoration: underline; }
 </style>

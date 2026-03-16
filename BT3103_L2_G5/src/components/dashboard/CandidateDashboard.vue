@@ -5,7 +5,7 @@
       <button @click="handleLogout" class="logout-btn">Logout</button>
     </nav>
 
-    <main class="main-content">
+    <main class="main-content" v-if="user">
       <div class="container">
         <h1>Welcome, {{ user.fullName }}!</h1>
         
@@ -26,11 +26,11 @@
                 <span class="location">📍 {{ job.location }}</span>
                 <button 
                   v-if="!hasApplied(job.id)" 
-                  @click="applyForJob(job)"
+                  @click="applyForJob(job.id)"
                   class="apply-btn"
-                  :disabled="isLoading"
+                  :disabled="applyingJobId === job.id"
                 >
-                  {{ isLoading ? 'Applying...' : 'Apply' }}
+                  {{ applyingJobId === job.id ? 'Applying...' : 'Apply' }}
                 </button>
                 <span v-else class="applied-badge">✓ Applied</span>
               </div>
@@ -64,28 +64,45 @@
 <script>
 import { signOut } from 'firebase/auth'
 import { auth, db } from '@/firebaseConfig'
-import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, query, where, getDocs, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore'
+import { useRouter } from 'vue-router'
 
 export default {
   name: 'CandidateDashboard',
-  props: {
-    user: {
-      type: Object,
-      required: true
+  setup() {
+    return {
+      router: useRouter()
     }
   },
   data() {
     return {
+      user: null,
       jobs: [],
       applications: [],
-      isLoading: false,
+      applyingJobId: null,
     }
   },
   mounted() {
-    this.fetchJobs()
-    this.fetchApplications()
+    this.fetchUserData().then(() => {
+      this.fetchJobs()
+      this.fetchApplications()
+    })
   },
   methods: {
+    async fetchUserData() {
+      try {
+        const currentUser = auth.currentUser
+        if (currentUser) {
+          const userRef = doc(db, 'users', currentUser.uid)
+          const userSnapshot = await getDoc(userRef)
+          if (userSnapshot.exists()) {
+            this.user = userSnapshot.data()
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching user data:', error)
+      }
+    },
     async fetchJobs() {
       try {
         const jobsRef = collection(db, 'jobs')
@@ -112,17 +129,24 @@ export default {
         console.error('Error fetching applications:', error)
       }
     },
-    async applyForJob(job) {
-      if (this.hasApplied(job.id)) {
+    async applyForJob(jobId) {
+      if (this.hasApplied(jobId)) {
         alert('You have already applied for this job.')
         return
       }
 
-      this.isLoading = true
+      // Find the job from the jobs array
+      const job = this.jobs.find(j => j.id === jobId)
+      if (!job) {
+        alert('Job not found.')
+        return
+      }
+
+      this.applyingJobId = jobId
       try {
         const appRef = collection(db, 'applications')
         await addDoc(appRef, {
-          jobId: job.id,
+          jobId: jobId,
           hrId: job.hrId,
           candidateId: this.user.uid,
           candidateName: this.user.fullName,
@@ -137,7 +161,7 @@ export default {
         console.error('Error applying for job:', error)
         alert('Failed to submit application')
       } finally {
-        this.isLoading = false
+        this.applyingJobId = null
       }
     },
     hasApplied(jobId) {
@@ -154,7 +178,8 @@ export default {
     async handleLogout() {
       try {
         await signOut(auth)
-        this.$emit('logout')
+        alert('Logged out successfully')
+        this.router.push('/login')
       } catch (error) {
         console.error('Logout error:', error)
         alert('Logout failed')

@@ -3,12 +3,12 @@
     <nav class="navbar">
       <div class="brand">CareerSwipe</div>
       <div class="user-info">
-        <span class="company-name">{{ user.companyName }}</span>
+        <span v-if="user" class="company-name">{{ user.companyName }}</span>
         <button @click="handleLogout" class="logout-btn">Logout</button>
       </div>
     </nav>
 
-    <main class="main-content">
+    <main class="main-content" v-if="user">
       <div class="container">
         <h1>HR Dashboard - {{ user.fullName }}</h1>
 
@@ -87,18 +87,19 @@
 <script>
 import { signOut } from 'firebase/auth'
 import { auth, db } from '@/firebaseConfig'
-import { collection, query, where, getDocs, addDoc, serverTimestamp, updateDoc, doc } from 'firebase/firestore'
+import { collection, query, where, getDocs, addDoc, serverTimestamp, updateDoc, doc, getDoc } from 'firebase/firestore'
+import { useRouter } from 'vue-router'
 
 export default {
   name: 'HRDashboard',
-  props: {
-    user: {
-      type: Object,
-      required: true
+  setup() {
+    return {
+      router: useRouter()
     }
   },
   data() {
     return {
+      user: null,
       newJob: {
         title: '',
         description: '',
@@ -111,10 +112,26 @@ export default {
     }
   },
   mounted() {
-    this.fetchPostedJobs()
-    this.fetchApplications()
+    this.fetchUserData().then(() => {
+      this.fetchPostedJobs()
+      this.fetchApplications()
+    })
   },
   methods: {
+    async fetchUserData() {
+      try {
+        const currentUser = auth.currentUser
+        if (currentUser) {
+          const userRef = doc(db, 'users', currentUser.uid)
+          const userSnapshot = await getDoc(userRef)
+          if (userSnapshot.exists()) {
+            this.user = userSnapshot.data()
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching user data:', error)
+      }
+    },
     async submitJob() {
       if (!this.newJob.title || !this.newJob.description || !this.newJob.location) {
         alert('Please fill in all required fields')
@@ -196,7 +213,8 @@ export default {
     async handleLogout() {
       try {
         await signOut(auth)
-        this.$emit('logout')
+        alert('Logged out successfully')
+        this.router.push('/login')
       } catch (error) {
         console.error('Logout error:', error)
         alert('Logout failed')

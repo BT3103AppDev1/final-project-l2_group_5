@@ -26,7 +26,7 @@
                 <span class="location">📍 {{ job.location }}</span>
                 <button 
                   v-if="!hasApplied(job.id)" 
-                  @click="applyForJob(job.id)"
+                  @click="openApplicationModal(job)"
                   class="apply-btn"
                   :disabled="applyingJobId === job.id"
                 >
@@ -58,6 +58,13 @@
         </section>
       </div>
     </main>
+    <ApplicationFormModal
+      v-if="showApplicationModal && selectedJob"
+      :job="selectedJob"
+      :loading="applyingJobId === selectedJob.id"
+      @close="closeApplicationModal"
+      @submit-application="submitApplicationForm"
+    />
   </div>
 </template>
 
@@ -66,9 +73,13 @@ import { signOut } from 'firebase/auth'
 import { auth, db } from '@/firebaseConfig'
 import { collection, query, where, getDocs, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore'
 import { useRouter } from 'vue-router'
+import ApplicationFormModal from '@/components/application/ApplicationFormModal.vue'
 
 export default {
   name: 'CandidateDashboard',
+  components: {
+    ApplicationFormModal
+  },
   setup() {
     return {
       router: useRouter()
@@ -80,6 +91,8 @@ export default {
       jobs: [],
       applications: [],
       applyingJobId: null,
+      showApplicationModal: false,
+      selectedJob: null
     }
   },
   mounted() {
@@ -129,34 +142,38 @@ export default {
         console.error('Error fetching applications:', error)
       }
     },
-    async applyForJob(jobId) {
-      if (this.hasApplied(jobId)) {
+    async submitApplicationForm(formData) {
+      if (!this.selectedJob) {
+        alert('No job selected.')
+        return
+      }
+
+      const job = this.selectedJob
+
+      if (this.hasApplied(job.id)) {
         alert('You have already applied for this job.')
         return
       }
 
-      // Find the job from the jobs array
-      const job = this.jobs.find(j => j.id === jobId)
-      if (!job) {
-        alert('Job not found.')
-        return
-      }
+      this.applyingJobId = job.id
 
-      this.applyingJobId = jobId
       try {
         const appRef = collection(db, 'applications')
         await addDoc(appRef, {
-          jobId: jobId,
+          jobId: job.id,
           hrId: job.hrId,
           candidateId: this.user.uid,
           candidateName: this.user.fullName,
           candidateEmail: this.user.email,
+          phone: formData.phone,
+          resumeUrl: formData.resumeUrl,
+          coverLetter: formData.coverLetter,
           status: 'Pending',
           createdAt: serverTimestamp()
         })
-        
+        await this.fetchApplications()
+        this.closeApplicationModal()
         alert('Application submitted successfully!')
-        this.fetchApplications()
       } catch (error) {
         console.error('Error applying for job:', error)
         alert('Failed to submit application')
@@ -184,7 +201,22 @@ export default {
         console.error('Logout error:', error)
         alert('Logout failed')
       }
-    }
+    },
+    
+    openApplicationModal(job) {
+      if (this.hasApplied(job.id)) {
+        alert('You have already applied for this job.')
+        return
+      }
+
+      this.selectedJob = job
+      this.showApplicationModal = true
+    },
+
+    closeApplicationModal() {
+      this.showApplicationModal = false
+      this.selectedJob = null
+    },
   }
 }
 </script>

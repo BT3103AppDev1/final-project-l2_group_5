@@ -226,7 +226,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { auth, db } from '@/firebase/Config'
+import { auth, db } from '@/firebaseConfig'
 import { signOut } from 'firebase/auth'
 import {
   collection, query, where, onSnapshot,

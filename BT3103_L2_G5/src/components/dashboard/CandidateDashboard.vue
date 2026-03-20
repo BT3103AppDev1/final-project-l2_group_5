@@ -23,11 +23,12 @@
 
           <div class="hero-search">
             <input
-              v-model="searchQuery"
-              type="text"
-              placeholder="Search job titles, keywords, or departments..."
+            v-model="searchInput"
+            @keyup.enter="applySearch"
+            type="text"
+            placeholder="Search job titles, keywords, or departments..."
             />
-            <button type="button">Search</button>
+            <button @click="applySearch" type="button">Search</button>
           </div>
         </div>
       </section>
@@ -216,23 +217,15 @@ export default {
       jobs: [],
       applications: [],
       applyingJobId: null,
-
+      searchInput: '',
       searchQuery: '',
-      debouncedQuery: '',
       department: 'All Departments',
       location: 'All Locations',
       empType: 'All Types',
+      sortBy: 'Most Recent'
     }
   },
-  watch: {
-    searchQuery(newVal) {
-      clearTimeout(this.searchTimer)
-      this.searchTimer = setTimeout(() => {
-        this.debouncedQuery = newVal
-      }, 300)
-  }
-},
-computed: {
+  computed: {
     locations() {
       const uniqueLocations = new Set()
       this.jobs.forEach((job) => {
@@ -258,7 +251,7 @@ computed: {
 },
     filteredJobs() {
       return this.jobs.filter((job) => {
-        const q = this.debouncedQuery.toLowerCase()
+        const q = (this.searchQuery || '').trim().toLowerCase()
 
         const matchesQuery =
           !q ||
@@ -298,6 +291,9 @@ computed: {
     })
   },
   methods: {
+    applySearch() {
+      this.searchQuery = this.searchInput
+    },
     async fetchUserData() {
       try {
         const currentUser = auth.currentUser
@@ -315,8 +311,8 @@ computed: {
         console.error('Error fetching user data:', error)
       }
     },
-
     async fetchJobs() {
+      console.log("FETCH JOBS CALLED")
       try {
         const jobsRef = collection(db, 'jobs')
         const querySnapshot = await getDocs(jobsRef)
@@ -324,6 +320,7 @@ computed: {
           id: doc.id,
           ...doc.data()
         }))
+        console.log("JOBS DATA:", this.jobs)
       } catch (error) {
         console.error('Error fetching jobs:', error)
         alert('Failed to load jobs')
@@ -396,6 +393,7 @@ computed: {
     },
 
     clearFilters() {
+      this.searchInput = ''
       this.searchQuery = ''
       this.department = 'All Departments'
       this.location = 'All Locations'

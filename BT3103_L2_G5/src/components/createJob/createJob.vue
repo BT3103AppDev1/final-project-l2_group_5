@@ -1,5 +1,10 @@
 <script setup>
 import { ref, computed, reactive, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import { db, auth } from '@/firebaseConfig'
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
+
+const router = useRouter()  
 
 // 1. Define the base Data first
 const form = reactive({
@@ -54,20 +59,36 @@ watch(isFormComplete, (complete) => {
 // 5. Button Actions
 const cancelPosting = () => {
   if (confirm('Are you sure you want to cancel? Any unsaved changes will be lost.')) {
-    console.log('Posting canceled.')
-    // In a real app, you might use a router here to go back: router.push('/dashboard')
+    router.push('/hr-dashboard')
   }
 }
 
-const publishJob = () => {
-  if (form.status === 'active') {
-    // This only triggers if the checklist is 100% done
-    console.log('Publishing Job Data:', form)
-    alert('Job Posting published successfully!')
-  } else {
-    // This triggers when status is 'inactive' (Save mode)
-    console.log('Saving Draft Data:', form)
-    alert('Draft saved successfully!')
+const publishJob = async () => {
+  if (!isFormComplete.value) {
+    alert('Please fill in all required fields before publishing.')
+    return
+  }
+  try {
+    await addDoc(collection(db, 'jobs'), {
+      title:          form.title,
+      department:     form.department,
+      employmentType: form.employmentType,
+      location:       form.location,
+      status:         form.status,
+      description:    form.description,
+      requirements:   form.requirements,
+      createdBy:      auth.currentUser?.uid || '',
+      createdAt:      serverTimestamp(),
+      totalApplicants: 0,
+      reviewed:        0,
+      shortlisted:     0,
+      interviews:      0
+    })
+    alert('Job posted successfully!')
+    router.push('/hr-dashboard')
+  } catch (error) {
+    console.error('Error publishing job:', error)
+    alert('Failed to publish job. Please try again.')
   }
 }
 </script>

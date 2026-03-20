@@ -3,8 +3,6 @@ import { initializeApp } from 'firebase/app'
 import { getAuth } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 
-// 🔴 REPLACE THESE WITH YOUR ACTUAL FIREBASE PROJECT CREDENTIALS
-// Go to: Firebase Console → Your Project → Project Settings → Your Apps
 const firebaseConfig = {
   apiKey: "AIzaSyDK0i3SlLXfz0d02hVwaQuCzKx68HsY9Aw",
   authDomain: "bt3103-final-project-e7ec3.firebaseapp.com",

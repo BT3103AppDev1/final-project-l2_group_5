@@ -10,11 +10,11 @@
 
       <nav class="sidebar__nav">
         <span class="nav-label">Main</span>
-        <router-link to="/hr/dashboard" class="nav-item" active-class="nav-item--active">
+        <router-link to="/hr-dashboard" class="nav-item" active-class="nav-item--active">
           <svg viewBox="0 0 20 20" fill="currentColor"><path d="M2 10a8 8 0 1116 0A8 8 0 012 10zm8-3a1 1 0 100 2 1 1 0 000-2zm0 4a3 3 0 100-6 3 3 0 000 6z"/></svg>
           Dashboard
         </router-link>
-        <router-link to="/hr/dashboard" class="nav-item" :class="{ 'nav-item--active': $route.path.includes('jobs') }">
+        <router-link to="/hr/jobs/create" class="nav-item" :class="{ 'nav-item--active': $route.path.includes('jobs') }">
           <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z" clip-rule="evenodd"/></svg>
           Job Postings
         </router-link>
@@ -226,7 +226,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { auth, db } from '../firebase/config'
+import { auth, db } from '@/firebase/Config'
 import { signOut } from 'firebase/auth'
 import {
   collection, query, where, onSnapshot,
@@ -341,11 +341,26 @@ async function confirmLogout() {
 <style scoped>
 /* ── Layout ── */
 .hr-layout {
+  --cs-navy:    #0D1B3E;
+  --cs-blue:    #1E6FEB;
+  --cs-blue-lt: #4A90F5;
+  --cs-teal:    #00C2A8;
+  --cs-bg:      #F4F7FD;
+  --cs-surface: #FFFFFF;
+  --cs-border:  #E2E8F6;
+  --cs-text:    #1A2340;
+  --cs-muted:   #6B7A99;
+  --cs-green:   #22C55E;
+  --cs-red:     #EF4444;
+  --cs-amber:   #F59E0B;
+  --radius:     12px;
+  --shadow-sm:  0 1px 3px rgba(13,27,62,.08);
+  --shadow-md:  0 4px 16px rgba(13,27,62,.12);
+  --shadow-lg:  0 8px 32px rgba(13,27,62,.16);
   display: flex;
   min-height: 100vh;
   background: var(--cs-bg);
 }
-
 /* ── Sidebar ── */
 .sidebar {
   width: 240px;

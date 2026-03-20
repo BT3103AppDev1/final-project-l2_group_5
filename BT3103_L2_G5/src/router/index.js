@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { auth } from '@/firebaseConfig'
 import LoginPage from '@/components/auth/LoginPage.vue'
+import ForgotPassword from '@/components/auth/ForgotPassword.vue'
 import SignUp from '@/components/auth/SignUp.vue'
 import CandidateDashboard from '@/components/dashboard/CandidateDashboard.vue'
 import HRDashboard from '@/components/dashboard/HRDashboard.vue'
@@ -29,7 +30,12 @@ const routes = [
     path: '/hr-dashboard',
     component: HRDashboard,
     meta: { requiresAuth: true, role: 'hr' }
-  }
+  },
+  {
+    path: '/forgot-password',
+    component: ForgotPassword,
+    meta: { requiresAuth: false }
+  },
 ]
 
 const router = createRouter({

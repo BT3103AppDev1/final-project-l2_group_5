@@ -218,41 +218,47 @@ export default {
       applyingJobId: null,
 
       searchQuery: '',
+      debouncedQuery: '',
       department: 'All Departments',
       location: 'All Locations',
       empType: 'All Types',
-
-      departments: [
-        'All Departments',
-        'Product',
-        'Engineering',
-        'Marketing',
-        'Design',
-        'Analytics',
-        'Sales',
-        'Finance',
-        'Human Resources',
-        'Customer Success'
-      ],
-      locations: [
-        'All Locations',
-        'San Francisco, CA',
-        'New York, NY',
-        'Austin, TX',
-        'Chicago, IL',
-        'Boston, MA',
-        'Seattle, WA',
-        'Singapore',
-        'London',
-        'Remote'
-      ],
-      empTypes: ['All Types', 'Full-time', 'Part-time', 'Contract', 'Internship']
     }
   },
-  computed: {
+  watch: {
+    searchQuery(newVal) {
+      clearTimeout(this.searchTimer)
+      this.searchTimer = setTimeout(() => {
+        this.debouncedQuery = newVal
+      }, 300)
+  }
+},
+computed: {
+    locations() {
+      const uniqueLocations = new Set()
+      this.jobs.forEach((job) => {
+        if (job.location) {
+          uniqueLocations.add(job.location)
+        }
+      })
+      return ['All Locations', ...Array.from(uniqueLocations).sort()]
+    },
+    departments() {
+      const set = new Set()
+      this.jobs.forEach(job => {
+        if (job.department) set.add(job.department)
+      })
+    return ['All Departments', ...Array.from(set).sort()]
+  },
+  empTypes() {
+    const set = new Set()
+    this.jobs.forEach(job => {
+      if (job.type) set.add(job.type)
+    })
+  return ['All Types', ...Array.from(set).sort()]
+},
     filteredJobs() {
       return this.jobs.filter((job) => {
-        const q = this.searchQuery.toLowerCase()
+        const q = this.debouncedQuery.toLowerCase()
 
         const matchesQuery =
           !q ||

@@ -5,6 +5,8 @@ import ForgotPassword from '@/components/auth/ForgotPassword.vue'
 import SignUp from '@/components/auth/SignUp.vue'
 import CandidateDashboard from '@/components/dashboard/CandidateDashboard.vue'
 import HRDashboard from '@/components/dashboard/HRDashboard.vue'
+import CreateJob from '@/components/createJob/createJob.vue'
+
 
 const routes = [
   {
@@ -22,6 +24,11 @@ const routes = [
     meta: { requiresAuth: false }
   },
   {
+    path: '/forgot-password',
+    component: ForgotPassword,
+    meta: { requiresAuth: false }
+  },
+  {
     path: '/candidate-dashboard',
     component: CandidateDashboard,
     meta: { requiresAuth: true, role: 'candidate' }
@@ -32,9 +39,14 @@ const routes = [
     meta: { requiresAuth: true, role: 'hr' }
   },
   {
-    path: '/forgot-password',
-    component: ForgotPassword,
-    meta: { requiresAuth: false }
+    path: '/hr/jobs/create',
+    component: CreateJob,
+    meta: { requiresAuth: true, role: 'hr' }
+  },
+  {
+    path: '/hr/jobs/:jobId/edit',
+    component: CreateJob,
+    meta: { requiresAuth: true, role: 'hr' }
   },
 ]
 

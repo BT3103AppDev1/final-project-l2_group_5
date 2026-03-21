@@ -1,11 +1,13 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { auth } from '@/firebaseConfig'
+import { auth } from '@/firebaseConfig.js'
 import LoginPage from '@/components/auth/LoginPage.vue'
 import ForgotPassword from '@/components/auth/ForgotPassword.vue'
 import SignUp from '@/components/auth/SignUp.vue'
 import CandidateDashboard from '@/components/dashboard/CandidateDashboard.vue'
 import HRDashboard from '@/components/dashboard/HRDashboard.vue'
-import CreateJob from '@/components/createJob/createJob.vue'
+import CreateJob from '@/components/createJob/CreateJob.vue'
+import CandidatesView from '@/components/candidates/CandidatesView.vue'
+import EditJobView from '@/components/createJob/EditJob.vue'
 
 
 const routes = [
@@ -44,10 +46,17 @@ const routes = [
     meta: { requiresAuth: true, role: 'hr' }
   },
   {
-    path: '/hr/jobs/:jobId/edit',
-    component: CreateJob,
-    meta: { requiresAuth: true, role: 'hr' }
+    path: '/hr/jobs/:id/edit',
+      name: 'EditJob',
+      component: EditJobView,
+      props: true
   },
+  {
+    path: '/hr/jobs/:id/candidates',
+    name: 'JobCandidates',
+    component: CandidatesView,
+    props: true
+  }
 ]
 
 const router = createRouter({

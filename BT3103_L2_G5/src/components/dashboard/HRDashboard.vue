@@ -14,10 +14,6 @@
           <svg viewBox="0 0 20 20" fill="currentColor"><path d="M2 10a8 8 0 1116 0A8 8 0 012 10zm8-3a1 1 0 100 2 1 1 0 000-2zm0 4a3 3 0 100-6 3 3 0 000 6z"/></svg>
           Dashboard
         </router-link>
-        <router-link to="/hr/jobs/create" class="nav-item" :class="{ 'nav-item--active': $route.path.includes('jobs') }">
-          <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z" clip-rule="evenodd"/></svg>
-          Job Postings
-        </router-link>
 
         <span class="nav-label" style="margin-top:16px">Screening</span>
         <a class="nav-item" @click="scrollToCandidates">
@@ -109,7 +105,7 @@
             <h2 class="section__title">Job Postings</h2>
             <div class="tab-group">
               <button
-                v-for="tab in ['All', 'Active', 'Closed']"
+                v-for="tab in ['All', 'Active', 'Inactive','Closed']"
                 :key="tab"
                 class="tab"
                 :class="{ 'tab--active': activeTab === tab }"
@@ -183,19 +179,40 @@
             </div>
 
             <div class="job-card__actions">
-              <span class="status-pill" :class="job.status === 'active' ? 'status-pill--active' : 'status-pill--closed'">
-                {{ job.status === 'active' ? '● Active' : '○ Closed' }}
+              <span class="status-pill" :class="{
+                'status-pill--active': job.status === 'active',
+                'status-pill--closed': job.status === 'closed',
+                'status-pill--inactive': job.status === 'inactive'
+              }" style="margin-bottom: 4px;">
+                {{ job.status === 'active' ? '● Active' : (job.status === 'closed' ? '○ Closed' : '✎ Inactive') }}
               </span>
-              <button class="btn btn--ghost btn--sm" @click="editJob(job.id)">
-                <svg viewBox="0 0 16 16" fill="currentColor" width="13" height="13"><path d="M12.146.854a.5.5 0 01.707 0l2.293 2.293a.5.5 0 010 .707l-9.5 9.5A.5.5 0 015.5 13.5H3a.5.5 0 01-.5-.5v-2.5a.5.5 0 01.146-.354l9.5-9.292z"/></svg>
-                Edit Job
-              </button>
+
               <router-link
                 :to="`/hr/jobs/${job.id}/candidates`"
                 class="btn btn--primary btn--sm"
+                style="width: 100%; justify-content: center;"
               >
                 View Candidates →
               </router-link>
+
+              <div style="display: flex; gap: 8px; width: 100%;">
+                <button 
+                  class="btn btn--ghost btn--sm" 
+                  style="flex: 1; justify-content: center;" 
+                  @click="editJob(job.id)"
+                >
+                  Edit
+                </button>
+                
+                <button 
+                  v-if="job.status !== 'closed'"
+                  class="btn btn--ghost btn--sm" 
+                  style="flex: 1; justify-content: center; color: #EF4444; border-color: #fca5a5; background-color: #fef2f2;" 
+                  @click="closeJob(job.id)"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -224,118 +241,152 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { auth, db } from '@/firebaseConfig'
-import { signOut } from 'firebase/auth'
-import {
-  collection, query, where, onSnapshot,
-  doc, getDoc, orderBy
-} from 'firebase/firestore'
+  import { ref, computed, onMounted, onUnmounted } from 'vue'
+  import { useRouter } from 'vue-router'
+  import { auth, db } from '@/firebaseConfig'
+  import { onAuthStateChanged, signOut } from 'firebase/auth'
+  import { collection, query, where, onSnapshot, doc, getDoc, updateDoc } from 'firebase/firestore'
 
-const router = useRouter()
+  const router = useRouter()
 
-// ─── State ────────────────────────────────────────────────────────────────
-const jobs          = ref([])
-const loading       = ref(true)
-const activeTab     = ref('All')
-const searchQuery   = ref('')
-const showLogoutModal = ref(false)
-const userName      = ref('HR User')
-const userInitials  = ref('HR')
-const candidatesSection = ref(null)
+  // ─── State ────────────────────────────────────────────────────────────────
+  const jobs          = ref([])
+  const loading       = ref(true)
+  const activeTab     = ref('All')
+  const searchQuery   = ref('')
+  const showLogoutModal = ref(false)
+  const userName      = ref('HR User')
+  const userInitials  = ref('HR')
+  const candidatesSection = ref(null)
 
-const stats = ref({ activeJobs: 0, totalApplicants: 0, interviews: 0, filled: 0 })
+  const stats = ref({ activeJobs: 0, totalApplicants: 0, interviews: 0, filled: 0 })
 
-let unsubscribeJobs = null
+  let unsubscribeJobs = null
 
-// ─── Lifecycle ────────────────────────────────────────────────────────────
-onMounted(async () => {
-  // Fetch current user's name
-  const user = auth.currentUser
-  if (user) {
-    const snap = await getDoc(doc(db, 'users', user.uid))
-    if (snap.exists()) {
-      const data = snap.data()
-      userName.value = `${data.firstName || ''} ${data.lastName || ''}`.trim() || 'HR User'
-      userInitials.value = (data.firstName?.[0] || '') + (data.lastName?.[0] || '') || 'HR'
+  // ─── Lifecycle ────────────────────────────────────────────────────────────
+  onMounted(() => {
+    // Use onAuthStateChanged to prevent race conditions on page refresh
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        // 1. Fetch current user's name
+        const snap = await getDoc(doc(db, 'users', user.uid))
+        if (snap.exists()) {
+          const data = snap.data()
+          userName.value = `${data.firstName || ''} ${data.lastName || ''}`.trim() || 'HR User'
+          userInitials.value = (data.firstName?.[0] || '') + (data.lastName?.[0] || '') || 'HR'
+        }
+
+        // The query now filters by hrId
+        const q = query(collection(db, 'jobs'), where('hrId', '==', user.uid))
+        
+        unsubscribeJobs = onSnapshot(q, snapshot => {
+          let fetchedJobs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }))
+          
+          // Sort locally by date to prevent Firebase requiring a composite index
+          fetchedJobs.sort((a, b) => {
+            const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : Date.now()
+            const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : Date.now()
+            return timeB - timeA
+          })
+
+          jobs.value = fetchedJobs
+          computeStats()
+          loading.value = false
+        }, (error) => {
+          console.error("Error fetching jobs:", error)
+          loading.value = false
+        })
+      } else {
+        router.push('/login')
+      }
+    })
+  })
+
+  onUnmounted(() => {
+    if (unsubscribeJobs) unsubscribeJobs()
+  })
+
+  // ─── Computed ──────────────────────────────────────────────────────────────
+  const filteredJobs = computed(() => {
+    let list = jobs.value
+    if (activeTab.value === 'Active')   list = list.filter(j => j.status === 'active')
+    if (activeTab.value === 'Inactive') list = list.filter(j => j.status === 'inactive')
+    if (activeTab.value === 'Closed')   list = list.filter(j => j.status === 'closed')
+    
+    if (searchQuery.value) {
+      const q = searchQuery.value.toLowerCase()
+      list = list.filter(j =>
+        j.title?.toLowerCase().includes(q) ||
+        j.department?.toLowerCase().includes(q)
+      )
+    }
+    return list
+  })
+
+  const tabCounts = computed(() => ({
+    All:      jobs.value.length,
+    Active:   jobs.value.filter(j => j.status === 'active').length,
+    Inactive: jobs.value.filter(j => j.status === 'inactive').length,
+    Closed:   jobs.value.filter(j => j.status === 'closed').length,
+  }))
+
+  // ─── Methods ───────────────────────────────────────────────────────────────
+  async function closeJob(jobId) {
+    const confirmClose = confirm('Are you sure you want to close this job posting? It will be removed from the active candidate portal.')
+    
+    if (confirmClose) {
+      try {
+        await updateDoc(doc(db, 'jobs', jobId), {
+          status: 'closed'
+        })
+        // You don't even need an alert here because the UI will instantly
+        // react and move it to the 'Closed' tab thanks to your real-time listener!
+      } catch (error) {
+        console.error('Error closing job:', error)
+        alert('Failed to close the job posting.')
+      }
     }
   }
 
-  // Real-time listener for jobs
-  const q = query(collection(db, 'jobs'), orderBy('createdAt', 'desc'))
-  unsubscribeJobs = onSnapshot(q, snapshot => {
-    jobs.value = snapshot.docs.map(d => ({ id: d.id, ...d.data() }))
-    computeStats()
-    loading.value = false
-  })
-})
-
-onUnmounted(() => {
-  if (unsubscribeJobs) unsubscribeJobs()
-})
-
-// ─── Computed ──────────────────────────────────────────────────────────────
-const filteredJobs = computed(() => {
-  let list = jobs.value
-  if (activeTab.value === 'Active')  list = list.filter(j => j.status === 'active')
-  if (activeTab.value === 'Closed')  list = list.filter(j => j.status === 'closed')
-  if (searchQuery.value) {
-    const q = searchQuery.value.toLowerCase()
-    list = list.filter(j =>
-      j.title?.toLowerCase().includes(q) ||
-      j.department?.toLowerCase().includes(q)
-    )
+  function computeStats() {
+    const active  = jobs.value.filter(j => j.status === 'active')
+    stats.value.activeJobs       = active.length
+    stats.value.totalApplicants  = jobs.value.reduce((s, j) => s + (j.totalApplicants || 0), 0)
+    stats.value.interviews       = jobs.value.reduce((s, j) => s + (j.interviews || 0), 0)
+    stats.value.filled           = jobs.value.filter(j => j.status === 'closed').length
   }
-  return list
-})
 
-const tabCounts = computed(() => ({
-  All:    jobs.value.length,
-  Active: jobs.value.filter(j => j.status === 'active').length,
-  Closed: jobs.value.filter(j => j.status === 'closed').length,
-}))
-
-// ─── Methods ───────────────────────────────────────────────────────────────
-function computeStats() {
-  const active  = jobs.value.filter(j => j.status === 'active')
-  stats.value.activeJobs       = active.length
-  stats.value.totalApplicants  = jobs.value.reduce((s, j) => s + (j.totalApplicants || 0), 0)
-  stats.value.interviews       = jobs.value.reduce((s, j) => s + (j.interviews || 0), 0)
-  stats.value.filled           = jobs.value.filter(j => j.status === 'closed').length
-}
-
-function formatDate(ts) {
-  if (!ts) return 'recently'
-  const date = ts.toDate ? ts.toDate() : new Date(ts)
-  return date.toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })
-}
-
-function deptColor(dept) {
-  const map = {
-    'Engineering': '#E0EDFF', 'Product': '#FFF3E0',
-    'Marketing': '#E8F5E9',  'Design': '#FCE4EC',
-    'HR': '#F3E5F5',         'Finance': '#E3F2FD',
+  function formatDate(ts) {
+    if (!ts) return 'Just now'
+    const date = ts.toDate ? ts.toDate() : new Date(ts)
+    return date.toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })
   }
-  return map[dept] || '#F0F4FF'
-}
 
-function editJob(id) {
-  router.push(`/hr/jobs/${id}/edit`)
-}
+  function deptColor(dept) {
+    const map = {
+      'Engineering': '#E0EDFF', 'Product': '#FFF3E0',
+      'Marketing': '#E8F5E9',  'Design': '#FCE4EC',
+      'HR': '#F3E5F5',         'Finance': '#E3F2FD',
+    }
+    return map[dept] || '#F0F4FF'
+  }
 
-function scrollToCandidates() {
-  candidatesSection.value?.scrollIntoView({ behavior: 'smooth' })
-}
+  function editJob(id) {
+    router.push(`/hr/jobs/${id}/edit`)
+  }
 
-function handleLogout() {
-  showLogoutModal.value = true
-}
+  function scrollToCandidates() {
+    candidatesSection.value?.scrollIntoView({ behavior: 'smooth' })
+  }
 
-async function confirmLogout() {
-  await signOut(auth)
-  router.push('/login')
-}
+  function handleLogout() {
+    showLogoutModal.value = true
+  }
+
+  async function confirmLogout() {
+    await signOut(auth)
+    router.push('/login')
+  }
 </script>
 
 <style scoped>
@@ -554,6 +605,7 @@ async function confirmLogout() {
 .status-pill { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 20px; }
 .status-pill--active { background: #DCFCE7; color: #16A34A; }
 .status-pill--closed { background: var(--cs-bg); color: var(--cs-muted); }
+.status-pill--inactive { background: #FFFBEB; color: #D97706; }
 
 /* ── Loading / Empty ── */
 .loading-state, .empty-state {

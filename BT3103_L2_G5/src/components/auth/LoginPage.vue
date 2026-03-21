@@ -84,7 +84,7 @@
               </button>
             </div>
             <div class="forgot-row">
-              <a href="#" class="forgot-link">Forgot password?</a>
+              <router-link to="/forgot-password" class="forgot-link">Forgot password?</router-link>
             </div>
           </div>
 

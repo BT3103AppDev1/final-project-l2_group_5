@@ -19,14 +19,36 @@
         </div>
 
         <div class="form-group">
-          <label for="resumeUrl">Resume Link</label>
-          <input
-            id="resumeUrl"
-            v-model="resumeUrl"
-            type="url"
-            placeholder="Paste your resume / Google Drive / LinkedIn link"
-            required
-          />
+          <label>Resume <span class="required">*</span></label>
+          <p class="helper-text">PDF format only · Max 10 MB</p>
+
+          <div
+            class="upload-box"
+            :class="{ 'drag-active': isDragActive }"
+            @click="triggerFilePicker"
+            @dragover.prevent="handleDragOver"
+            @dragleave.prevent="handleDragLeave"
+            @drop.prevent="handleDrop"
+          >
+            <input
+              ref="fileInput"
+              id="resumeFile"
+              type="file"
+              accept="application/pdf,.pdf"
+              class="hidden-file-input"
+              @change="handleFileChange"
+            />
+
+            <div class="upload-icon">⬆</div>
+            <p class="upload-title">Drag & drop your resume</p>
+            <p class="upload-subtitle">
+              or <span class="browse-link">click to browse</span>
+            </p>
+          </div>
+
+          <p v-if="resumeFileName" class="file-name">
+            Selected file: {{ resumeFileName }}
+          </p>
         </div>
 
         <div class="form-group">
@@ -70,15 +92,82 @@ export default {
   data() {
     return {
       phone: '',
-      resumeUrl: '',
-      coverLetter: ''
+      resumeFile: null,
+      resumeFileName: '',
+      coverLetter: '',
+      isDragActive: false
     }
   },
   methods: {
+    triggerFilePicker() {
+      this.$refs.fileInput.click()
+    },
+
+    validateAndStoreFile(file, resetInput = false) {
+      if (!file) {
+        this.resumeFile = null
+        this.resumeFileName = ''
+        return
+      }
+
+      const isPdf =
+        file.type === 'application/pdf' ||
+        file.name.toLowerCase().endsWith('.pdf')
+
+      const maxSizeInBytes = 10 * 1024 * 1024
+
+      if (!isPdf) {
+        alert('Please upload a PDF file only.')
+        if (resetInput && this.$refs.fileInput) {
+          this.$refs.fileInput.value = ''
+        }
+        this.resumeFile = null
+        this.resumeFileName = ''
+        return
+      }
+
+      if (file.size > maxSizeInBytes) {
+        alert('File size must be 10 MB or less.')
+        if (resetInput && this.$refs.fileInput) {
+          this.$refs.fileInput.value = ''
+        }
+        this.resumeFile = null
+        this.resumeFileName = ''
+        return
+      }
+
+      this.resumeFile = file
+      this.resumeFileName = file.name
+    },
+
+    handleFileChange(event) {
+      const file = event.target.files[0]
+      this.validateAndStoreFile(file, true)
+    },
+
+    handleDragOver() {
+      this.isDragActive = true
+    },
+
+    handleDragLeave() {
+      this.isDragActive = false
+    },
+
+    handleDrop(event) {
+      this.isDragActive = false
+      const file = event.dataTransfer.files[0]
+      this.validateAndStoreFile(file)
+    },
+
     submitForm() {
+      if (!this.resumeFile) {
+        alert('Please upload your resume in PDF format.')
+        return
+      }
+
       this.$emit('submit-application', {
         phone: this.phone.trim(),
-        resumeUrl: this.resumeUrl.trim(),
+        resumeFile: this.resumeFile,
         coverLetter: this.coverLetter.trim()
       })
     }
@@ -101,8 +190,8 @@ export default {
 .modal-card {
   background: white;
   width: 100%;
-  max-width: 600px;
-  border-radius: 14px;
+  max-width: 640px;
+  border-radius: 16px;
   padding: 24px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
 }
@@ -130,7 +219,7 @@ export default {
 .application-form {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 20px;
 }
 
 .form-group {
@@ -144,16 +233,90 @@ export default {
   color: #111827;
 }
 
+.required {
+  color: #dc2626;
+}
+
+.helper-text {
+  margin: 0;
+  font-size: 0.92rem;
+  color: #6b7280;
+}
+
 .form-group input,
 .form-group textarea {
   border: 1px solid #d1d5db;
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 12px;
   font-size: 0.95rem;
 }
 
 .form-group textarea {
   resize: vertical;
+}
+
+.hidden-file-input {
+  display: none;
+}
+
+.upload-box {
+  border: 2px dashed #cbd5e1;
+  border-radius: 14px;
+  padding: 28px 20px;
+  text-align: center;
+  cursor: pointer;
+  background: #f8fafc;
+  transition: 0.2s ease;
+}
+
+.upload-box:hover {
+  border-color: #1a237e;
+  background: #f5f7ff;
+}
+
+.drag-active {
+  border-color: #1a237e;
+  background: #eef2ff;
+}
+
+.upload-icon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 12px;
+  border-radius: 12px;
+  background: #eef2ff;
+  color: #1a237e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.upload-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.upload-subtitle {
+  margin: 6px 0 0;
+  font-size: 0.95rem;
+  color: #6b7280;
+}
+
+.browse-link {
+  color: #1a237e;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.file-name {
+  margin: 4px 0 0;
+  font-size: 0.92rem;
+  color: #374151;
+  word-break: break-word;
 }
 
 .modal-actions {

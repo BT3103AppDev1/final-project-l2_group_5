@@ -70,10 +70,11 @@
 
 <script>
 import { signOut } from 'firebase/auth'
-import { auth, db } from '@/firebaseConfig'
+import { auth, db, storage } from '@/firebaseConfig'
 import { collection, query, where, getDocs, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore'
 import { useRouter } from 'vue-router'
 import ApplicationFormModal from '@/components/application/ApplicationFormModal.vue'
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 
 export default {
   name: 'CandidateDashboard',
@@ -158,6 +159,18 @@ export default {
       this.applyingJobId = job.id
 
       try {
+        let resumeUrl = ''
+
+        if (formData.resumeFile) {
+          const file = formData.resumeFile
+          const safeFileName = file.name.replace(/\s+/g, '_')
+          const filePath = `resumes/${this.user.uid}/${job.id}-${Date.now()}-${safeFileName}`
+          const storageRef = ref(storage, filePath)
+
+          await uploadBytes(storageRef, file)
+          resumeUrl = await getDownloadURL(storageRef)
+        }
+
         const appRef = collection(db, 'applications')
         await addDoc(appRef, {
           jobId: job.id,
@@ -166,11 +179,12 @@ export default {
           candidateName: this.user.fullName,
           candidateEmail: this.user.email,
           phone: formData.phone,
-          resumeUrl: formData.resumeUrl,
+          resumeUrl: resumeUrl,
           coverLetter: formData.coverLetter,
           status: 'Pending',
           createdAt: serverTimestamp()
         })
+
         await this.fetchApplications()
         this.closeApplicationModal()
         alert('Application submitted successfully!')

@@ -23,11 +23,12 @@
 
           <div class="hero-search">
             <input
-              v-model="searchQuery"
-              type="text"
-              placeholder="Search job titles, keywords, or departments..."
+            v-model="searchInput"
+            @keyup.enter="applySearch"
+            type="text"
+            placeholder="Search job titles, keywords, or departments..."
             />
-            <button type="button">Search</button>
+            <button @click="applySearch" type="button">Search</button>
           </div>
         </div>
       </section>
@@ -155,7 +156,7 @@
               :key="app.id"
               class="application-item"
             >
-              <div class="app-job-title">{{ getJobTitle(app.jobId) }}</div>
+            <div class="app-job-title">{{ getJobTitle(app) }}</div>
               <div class="app-details">
                 <span class="app-date">
                   Applied: {{ formatDate(app.createdAt) }}
@@ -216,23 +217,15 @@ export default {
       jobs: [],
       applications: [],
       applyingJobId: null,
-
+      searchInput: '',
       searchQuery: '',
-      debouncedQuery: '',
       department: 'All Departments',
       location: 'All Locations',
       empType: 'All Types',
+      sortBy: 'Most Recent'
     }
   },
-  watch: {
-    searchQuery(newVal) {
-      clearTimeout(this.searchTimer)
-      this.searchTimer = setTimeout(() => {
-        this.debouncedQuery = newVal
-      }, 300)
-  }
-},
-computed: {
+  computed: {
     locations() {
       const uniqueLocations = new Set()
       this.jobs.forEach((job) => {
@@ -258,7 +251,7 @@ computed: {
 },
     filteredJobs() {
       return this.jobs.filter((job) => {
-        const q = this.debouncedQuery.toLowerCase()
+        const q = (this.searchQuery || '').trim().toLowerCase()
 
         const matchesQuery =
           !q ||
@@ -298,6 +291,9 @@ computed: {
     })
   },
   methods: {
+    applySearch() {
+      this.searchQuery = this.searchInput
+    },
     async fetchUserData() {
       try {
         const currentUser = auth.currentUser
@@ -315,11 +311,11 @@ computed: {
         console.error('Error fetching user data:', error)
       }
     },
-
     async fetchJobs() {
       try {
         const jobsRef = collection(db, 'jobs')
-        const querySnapshot = await getDocs(jobsRef)
+        const q = query(jobsRef, where('status', '==', 'active'))
+        const querySnapshot = await getDocs(q)
         this.jobs = querySnapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data()
@@ -346,48 +342,48 @@ computed: {
       }
     },
 
-    async applyForJob(jobId) {
-      if (this.hasApplied(jobId)) {
-        alert('You have already applied for this job.')
-        return
-      }
-
-      const job = this.jobs.find((j) => j.id === jobId)
-      if (!job) {
-        alert('Job not found.')
-        return
-      }
-
-      this.applyingJobId = jobId
-      try {
-        const appRef = collection(db, 'applications')
-        await addDoc(appRef, {
-          jobId: jobId,
-          hrId: job.hrId,
-          candidateId: this.user.uid,
-          candidateName: this.user.fullName,
-          candidateEmail: this.user.email,
-          status: 'Pending',
-          createdAt: serverTimestamp()
-        })
-
-        alert('Application submitted successfully!')
-        this.fetchApplications()
-      } catch (error) {
-        console.error('Error applying for job:', error)
-        alert('Failed to submit application')
-      } finally {
-        this.applyingJobId = null
-      }
-    },
+   async applyForJob(jobId) {
+    if (this.hasApplied(jobId)) {
+      alert('You have already applied for this job.')
+      return
+    }
+    const job = this.jobs.find((j) => j.id === jobId)
+    if (!job) {
+      alert('Job not found.')
+      return
+    }
+    this.applyingJobId = jobId
+    try {
+      const appRef = collection(db, 'applications')
+      await addDoc(appRef, {
+        jobId: jobId,
+        jobTitle: job.title || 'Untitled Job',
+        company: job.company || '',
+        department: job.department || 'General',
+        location: job.location || '',
+        hrId: job.hrId,
+        candidateId: this.user.uid,
+        candidateName: this.user.fullName,
+        candidateEmail: this.user.email,
+        status: 'Pending',
+        createdAt: serverTimestamp()
+      })
+      alert('Application submitted successfully!')
+      this.fetchApplications()
+    } catch (error) {
+      console.error('Error applying for job:', error)
+      alert('Failed to submit application')
+    } finally {
+      this.applyingJobId = null
+    }
+  },
 
     hasApplied(jobId) {
       return this.applications.some((app) => app.jobId === jobId)
     },
 
-    getJobTitle(jobId) {
-      const job = this.jobs.find((j) => j.id === jobId)
-      return job ? job.title : 'Unknown Job'
+    getJobTitle(app) {
+      return app.jobTitle || 'Unknown Job'
     },
 
     formatDate(timestamp) {
@@ -396,6 +392,7 @@ computed: {
     },
 
     clearFilters() {
+      this.searchInput = ''
       this.searchQuery = ''
       this.department = 'All Departments'
       this.location = 'All Locations'

@@ -156,7 +156,7 @@
               :key="app.id"
               class="application-item"
             >
-              <div class="app-job-title">{{ getJobTitle(app.jobId) }}</div>
+            <div class="app-job-title">{{ getJobTitle(app) }}</div>
               <div class="app-details">
                 <span class="app-date">
                   Applied: {{ formatDate(app.createdAt) }}
@@ -312,15 +312,14 @@ export default {
       }
     },
     async fetchJobs() {
-      console.log("FETCH JOBS CALLED")
       try {
         const jobsRef = collection(db, 'jobs')
-        const querySnapshot = await getDocs(jobsRef)
+        const q = query(jobsRef, where('status', '==', 'active'))
+        const querySnapshot = await getDocs(q)
         this.jobs = querySnapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data()
         }))
-        console.log("JOBS DATA:", this.jobs)
       } catch (error) {
         console.error('Error fetching jobs:', error)
         alert('Failed to load jobs')
@@ -343,48 +342,48 @@ export default {
       }
     },
 
-    async applyForJob(jobId) {
-      if (this.hasApplied(jobId)) {
-        alert('You have already applied for this job.')
-        return
-      }
-
-      const job = this.jobs.find((j) => j.id === jobId)
-      if (!job) {
-        alert('Job not found.')
-        return
-      }
-
-      this.applyingJobId = jobId
-      try {
-        const appRef = collection(db, 'applications')
-        await addDoc(appRef, {
-          jobId: jobId,
-          hrId: job.hrId,
-          candidateId: this.user.uid,
-          candidateName: this.user.fullName,
-          candidateEmail: this.user.email,
-          status: 'Pending',
-          createdAt: serverTimestamp()
-        })
-
-        alert('Application submitted successfully!')
-        this.fetchApplications()
-      } catch (error) {
-        console.error('Error applying for job:', error)
-        alert('Failed to submit application')
-      } finally {
-        this.applyingJobId = null
-      }
-    },
+   async applyForJob(jobId) {
+    if (this.hasApplied(jobId)) {
+      alert('You have already applied for this job.')
+      return
+    }
+    const job = this.jobs.find((j) => j.id === jobId)
+    if (!job) {
+      alert('Job not found.')
+      return
+    }
+    this.applyingJobId = jobId
+    try {
+      const appRef = collection(db, 'applications')
+      await addDoc(appRef, {
+        jobId: jobId,
+        jobTitle: job.title || 'Untitled Job',
+        company: job.company || '',
+        department: job.department || 'General',
+        location: job.location || '',
+        hrId: job.hrId,
+        candidateId: this.user.uid,
+        candidateName: this.user.fullName,
+        candidateEmail: this.user.email,
+        status: 'Pending',
+        createdAt: serverTimestamp()
+      })
+      alert('Application submitted successfully!')
+      this.fetchApplications()
+    } catch (error) {
+      console.error('Error applying for job:', error)
+      alert('Failed to submit application')
+    } finally {
+      this.applyingJobId = null
+    }
+  },
 
     hasApplied(jobId) {
       return this.applications.some((app) => app.jobId === jobId)
     },
 
-    getJobTitle(jobId) {
-      const job = this.jobs.find((j) => j.id === jobId)
-      return job ? job.title : 'Unknown Job'
+    getJobTitle(app) {
+      return app.jobTitle || 'Unknown Job'
     },
 
     formatDate(timestamp) {

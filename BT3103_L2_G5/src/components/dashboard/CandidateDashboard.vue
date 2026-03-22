@@ -118,7 +118,7 @@
               </p>
 
               <div class="job-footer">
-                <button class="details-btn" type="button">
+                <button class="details-btn" type="button" @click="viewJobDetails(job.id)">
                   View Details
                 </button>
 
@@ -398,6 +398,13 @@ export default {
       this.department = 'All Departments'
       this.location = 'All Locations'
       this.empType = 'All Types'
+    },
+
+    viewJobDetails(jobId) {
+      const job = this.jobs.find(j => j.id === jobId)
+      if (job) {
+        alert(`${job.title}\n\n${job.description}\n\nRequirements:\n${job.requirements || 'N/A'}`)
+      }
     },
 
     getDepartmentBadgeStyle(department) {

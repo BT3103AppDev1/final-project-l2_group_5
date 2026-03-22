@@ -1,9 +1,15 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { auth } from '@/firebaseConfig'
+import { auth } from '@/firebaseConfig.js'
 import LoginPage from '@/components/auth/LoginPage.vue'
+import ForgotPassword from '@/components/auth/ForgotPassword.vue'
 import SignUp from '@/components/auth/SignUp.vue'
 import CandidateDashboard from '@/components/dashboard/CandidateDashboard.vue'
 import HRDashboard from '@/components/dashboard/HRDashboard.vue'
+import CreateJob from '@/components/createJob/createJob.vue'
+import CandidatesView from '@/components/candidates/CandidatesView.vue'
+import EditJobView from '@/components/createJob/EditJob.vue'
+import AllCandidatesView from '@/components/candidates/AllCandidatesView.vue'
+
 
 const routes = [
   {
@@ -21,6 +27,11 @@ const routes = [
     meta: { requiresAuth: false }
   },
   {
+    path: '/forgot-password',
+    component: ForgotPassword,
+    meta: { requiresAuth: false }
+  },
+  {
     path: '/candidate-dashboard',
     component: CandidateDashboard,
     meta: { requiresAuth: true, role: 'candidate' }
@@ -29,7 +40,29 @@ const routes = [
     path: '/hr-dashboard',
     component: HRDashboard,
     meta: { requiresAuth: true, role: 'hr' }
-  }
+  },
+  {
+    path: '/hr/jobs/create',
+    component: CreateJob,
+    meta: { requiresAuth: true, role: 'hr' }
+  },
+  {
+    path: '/hr/jobs/:id/edit',
+      name: 'EditJob',
+      component: EditJobView,
+      props: true
+  },
+  {
+    path: '/hr/jobs/:id/candidates',
+    name: 'JobCandidates',
+    component: CandidatesView,
+    props: true
+  },
+  {
+  path: '/hr/candidates',
+  component: AllCandidatesView,
+  meta: { requiresAuth: true, role: 'hr' }
+  },
 ]
 
 const router = createRouter({

@@ -1,77 +1,3 @@
-<script setup>
-import { ref, computed, reactive, watch } from 'vue'
-
-// 1. Define the base Data first
-const form = reactive({
-  title: '',
-  department: '',
-  employmentType: '',
-  location: '',
-  status: 'active',
-  description: '',
-  requirements: ''
-})
-
-const dropdownOptions = reactive({
-  departments: ['Engineering', 'Product', 'Design', 'Marketing', 'Sales'],
-  types: ['Full-time', 'Part-time', 'Contract'],
-  locations: ['Remote', 'Hybrid', 'On-site']
-})
-
-// 2. Define helper functions
-const countWords = (text) => {
-  if (!text) return 0
-  return text.trim().split(/\s+/).filter(Boolean).length
-}
-
-// 3. Define Computed Properties (Logic)
-const descriptionWordCount = computed(() => countWords(form.description))
-const requirementsWordCount = computed(() => countWords(form.requirements))
-
-const completionState = reactive({
-  titleFilled: computed(() => !!form.title),
-  departmentFilled: computed(() => !!form.department),
-  locationFilled: computed(() => !!form.location),
-  typeFilled: computed(() => !!form.employmentType),
-  descriptionFilled: computed(() => !!form.description),
-  requirementsFilled: computed(() => !!form.requirements)
-})
-
-const isFormComplete = computed(() => {
-  return Object.values(completionState).every(isFilled => isFilled)
-})
-
-// 4. NOW you can watch them, because they exist!
-// This is the "Brain" that manages the status automatically
-watch(isFormComplete, (complete) => {
-  if (complete) {
-    form.status = 'active'
-  } else {
-    form.status = 'inactive'
-  }
-}, { immediate: true }) // 'immediate' ensures it checks the status as soon as the page loads
-
-// 5. Button Actions
-const cancelPosting = () => {
-  if (confirm('Are you sure you want to cancel? Any unsaved changes will be lost.')) {
-    console.log('Posting canceled.')
-    // In a real app, you might use a router here to go back: router.push('/dashboard')
-  }
-}
-
-const publishJob = () => {
-  if (form.status === 'active') {
-    // This only triggers if the checklist is 100% done
-    console.log('Publishing Job Data:', form)
-    alert('Job Posting published successfully!')
-  } else {
-    // This triggers when status is 'inactive' (Save mode)
-    console.log('Saving Draft Data:', form)
-    alert('Draft saved successfully!')
-  }
-}
-</script>
-
 <template>
   <div class="job-creation-container">
     <div class="breadcrumbs">
@@ -240,6 +166,116 @@ const publishJob = () => {
     </main>
   </div>
 </template>
+
+<script setup>
+import { ref, computed, reactive, watch } from 'vue'
+// 1. Make sure you are importing useRouter
+import { useRouter } from 'vue-router' 
+import { db, auth } from '@/firebaseConfig'
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
+
+// 2. Make sure you define the router right here!
+const router = useRouter()
+
+// 1. Define the base Data first
+const form = reactive({
+  title: '',
+  department: '',
+  employmentType: '',
+  location: '',
+  status: 'active',
+  description: '',
+  requirements: ''
+})
+
+const dropdownOptions = reactive({
+  departments: ['Engineering', 'Product', 'Design', 'Marketing', 'Sales'],
+  types: ['Full-time', 'Part-time', 'Contract'],
+  locations: ['Remote', 'Hybrid', 'On-site']
+})
+
+// 2. Define helper functions
+const countWords = (text) => {
+  if (!text) return 0
+  return text.trim().split(/\s+/).filter(Boolean).length
+}
+
+// 3. Define Computed Properties (Logic)
+const descriptionWordCount = computed(() => countWords(form.description))
+const requirementsWordCount = computed(() => countWords(form.requirements))
+
+const completionState = reactive({
+  titleFilled: computed(() => !!form.title),
+  departmentFilled: computed(() => !!form.department),
+  locationFilled: computed(() => !!form.location),
+  typeFilled: computed(() => !!form.employmentType),
+  descriptionFilled: computed(() => !!form.description),
+  requirementsFilled: computed(() => !!form.requirements)
+})
+
+const isFormComplete = computed(() => {
+  return Object.values(completionState).every(isFilled => isFilled)
+})
+
+// 4. NOW you can watch them, because they exist!
+// This is the "Brain" that manages the status automatically
+watch(isFormComplete, (complete) => {
+  if (complete) {
+    form.status = 'active'
+  } else {
+    form.status = 'inactive'
+  }
+}, { immediate: true }) // 'immediate' ensures it checks the status as soon as the page loads
+
+// 5. Button Actions
+const cancelPosting = () => {
+  if (confirm('Are you sure you want to cancel? Any unsaved changes will be lost.')) {
+    console.log('Posting canceled.')
+    // In a real app, you might use a router here to go back: router.push('/dashboard')
+  }
+}
+
+const publishJob = async () => {
+  const finalStatus = isFormComplete.value ? 'active' : 'inactive'
+
+  // Safety check for user
+  if (!auth.currentUser) {
+    alert('You must be logged in to post a job.')
+    return
+  }
+
+  try {
+    
+    await addDoc(collection(db, 'jobs'), {
+      title:          form.title,
+      department:     form.department,
+      employmentType: form.employmentType,
+      location:       form.location,
+      status:         finalStatus,
+      description:    form.description,
+      requirements:   form.requirements,
+      // CHANGED: This was createdBy, now it is hrId
+      hrId:           auth.currentUser.uid, 
+      createdAt:      serverTimestamp(),
+      totalApplicants: 0,
+      reviewed:        0,
+      shortlisted:     0,
+      interviews:      0
+    })
+    
+    if (finalStatus === 'active') {
+      alert('Job posted successfully!')
+    } else {
+      alert('Job saved as a draft (inactive) because fields were missing.')
+    }
+    
+    router.push('/hr-dashboard')
+  } catch (error) {
+    console.error('Error publishing job:', error)
+    alert('Failed to publish job. Please try again.')
+  }
+}
+</script>
 
 <style scoped>
 .disabled-card {

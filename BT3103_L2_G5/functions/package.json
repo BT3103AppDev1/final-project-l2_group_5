@@ -1,0 +1,23 @@
+{
+  "name": "resume-parsing-backend",
+  "description": "Firebase Cloud Function for resume parsing",
+  "version": "1.0.0",
+  "private": true,
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.js",
+  "scripts": {
+    "start": "firebase emulators:start --only functions",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "dependencies": {
+    "firebase-admin": "^11.10.1",
+    "firebase-functions": "^4.4.1",
+    "pdf2json": "^4.0.2"
+  },
+  "devDependencies": {
+    "firebase-tools": "^12.4.0"
+  }
+}

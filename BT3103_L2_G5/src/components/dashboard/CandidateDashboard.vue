@@ -1,9 +1,6 @@
 <template>
   <div class="candidate-dashboard">
-    <nav class="navbar">
-      <div class="brand">CareerSwipe</div>
-      <button @click="handleLogout" class="logout-btn">Logout</button>
-    </nav>
+    <CandidateNav />
 
     <main v-if="user">
       <section class="hero">
@@ -137,39 +134,8 @@
             </div>
           </div>
         </section>
-
-        <section class="applications-section">
-          <div class="section-header">
-            <div>
-              <h2>My Applications</h2>
-              <p>Track the status of your submitted applications</p>
-            </div>
-          </div>
-
-          <div v-if="applications.length === 0" class="no-applications">
-            You haven't applied to any jobs yet.
-          </div>
-
-          <div v-else class="applications-list">
-            <div
-              v-for="app in applications"
-              :key="app.id"
-              class="application-item"
-            >
-            <div class="app-job-title">{{ getJobTitle(app) }}</div>
-              <div class="app-details">
-                <span class="app-date">
-                  Applied: {{ formatDate(app.createdAt) }}
-                </span>
-                <span :class="['app-status', app.status.toLowerCase()]">
-                  {{ app.status }}
-                </span>
-              </div>
-            </div>
-          </div>
-        </section>
       </div>
-
+      
       <footer class="footer">
         <div class="footer-inner">
           <div class="footer-brand">
@@ -197,6 +163,7 @@
 </template>
 
 <script>
+import CandidateNav from '@/components/CandidateNav.vue'
 import { signOut } from 'firebase/auth'
 import { auth, db, storage } from '@/firebaseConfig'
 import {
@@ -215,6 +182,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 export default {
   name: 'CandidateDashboard',
   components: {
+    CandidateNav,
     ApplicationFormModal
   },
   setup() {
@@ -385,6 +353,10 @@ export default {
         const appRef = collection(db, 'applications')
         await addDoc(appRef, {
           jobId: job.id,
+          jobTitle: job.title,
+          department: job.department || 'General',
+          location: job.location || 'N/A',
+          employmentType: job.employmentType || job.type || 'Full-time',
           hrId: job.hrId,
           candidateId: this.user.uid,
           candidateName: this.user.fullName,

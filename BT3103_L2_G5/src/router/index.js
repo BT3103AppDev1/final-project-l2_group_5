@@ -9,6 +9,7 @@ import CreateJob from '@/components/createJob/createJob.vue'
 import CandidatesView from '@/components/candidates/CandidatesView.vue'
 import EditJobView from '@/components/createJob/EditJob.vue'
 import AllCandidatesView from '@/components/candidates/AllCandidatesView.vue'
+import MyApplications from '@/components/application/MyApplications.vue'
 
 
 const routes = [
@@ -36,6 +37,11 @@ const routes = [
     component: CandidateDashboard,
     meta: { requiresAuth: true, role: 'candidate' }
   },
+  {
+  path: '/applications',
+  component: MyApplications,
+  meta: { requiresAuth: true, role: 'candidate' }
+},
   {
     path: '/hr-dashboard',
     component: HRDashboard,

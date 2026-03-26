@@ -23,11 +23,12 @@
 
           <div class="hero-search">
             <input
-              v-model="searchQuery"
-              type="text"
-              placeholder="Search job titles, keywords, or departments..."
+            v-model="searchInput"
+            @keyup.enter="applySearch"
+            type="text"
+            placeholder="Search job titles, keywords, or departments..."
             />
-            <button type="button">Search</button>
+            <button @click="applySearch" type="button">Search</button>
           </div>
         </div>
       </section>
@@ -123,7 +124,7 @@
 
                 <button
                   v-if="!hasApplied(job.id)"
-                  @click="applyForJob(job.id)"
+                  @click="openApplicationModal(job)"
                   class="apply-btn"
                   :disabled="applyingJobId === job.id"
                   type="button"
@@ -155,7 +156,7 @@
               :key="app.id"
               class="application-item"
             >
-              <div class="app-job-title">{{ getJobTitle(app.jobId) }}</div>
+            <div class="app-job-title">{{ getJobTitle(app) }}</div>
               <div class="app-details">
                 <span class="app-date">
                   Applied: {{ formatDate(app.createdAt) }}
@@ -185,12 +186,19 @@
         </div>
       </footer>
     </main>
+    <ApplicationFormModal
+      v-if="showApplicationModal && selectedJob"
+      :job="selectedJob"
+      :loading="applyingJobId === selectedJob.id"
+      @close="closeApplicationModal"
+      @submit-application="submitApplicationForm"
+    />
   </div>
 </template>
 
 <script>
 import { signOut } from 'firebase/auth'
-import { auth, db } from '@/firebaseConfig'
+import { auth, db, storage } from '@/firebaseConfig'
 import {
   collection,
   query,
@@ -202,9 +210,13 @@ import {
   getDoc
 } from 'firebase/firestore'
 import { useRouter } from 'vue-router'
-
+import ApplicationFormModal from '@/components/application/ApplicationFormModal.vue'
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 export default {
   name: 'CandidateDashboard',
+  components: {
+    ApplicationFormModal
+  },
   setup() {
     return {
       router: useRouter()
@@ -216,23 +228,17 @@ export default {
       jobs: [],
       applications: [],
       applyingJobId: null,
-
+      showApplicationModal: false,
+      selectedJob: null,
+      searchInput: '',
       searchQuery: '',
-      debouncedQuery: '',
       department: 'All Departments',
       location: 'All Locations',
       empType: 'All Types',
+      sortBy: 'Most Recent'
     }
   },
-  watch: {
-    searchQuery(newVal) {
-      clearTimeout(this.searchTimer)
-      this.searchTimer = setTimeout(() => {
-        this.debouncedQuery = newVal
-      }, 300)
-  }
-},
-computed: {
+  computed: {
     locations() {
       const uniqueLocations = new Set()
       this.jobs.forEach((job) => {
@@ -258,7 +264,7 @@ computed: {
 },
     filteredJobs() {
       return this.jobs.filter((job) => {
-        const q = this.debouncedQuery.toLowerCase()
+        const q = (this.searchQuery || '').trim().toLowerCase()
 
         const matchesQuery =
           !q ||
@@ -298,6 +304,9 @@ computed: {
     })
   },
   methods: {
+    applySearch() {
+      this.searchQuery = this.searchInput
+    },
     async fetchUserData() {
       try {
         const currentUser = auth.currentUser
@@ -315,11 +324,11 @@ computed: {
         console.error('Error fetching user data:', error)
       }
     },
-
     async fetchJobs() {
       try {
         const jobsRef = collection(db, 'jobs')
-        const querySnapshot = await getDocs(jobsRef)
+        const q = query(jobsRef, where('status', '==', 'active'))
+        const querySnapshot = await getDocs(q)
         this.jobs = querySnapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data()
@@ -345,34 +354,51 @@ computed: {
         console.error('Error fetching applications:', error)
       }
     },
+    async submitApplicationForm(formData) {
+      if (!this.selectedJob) {
+        alert('No job selected.')
+        return
+      }
 
-    async applyForJob(jobId) {
-      if (this.hasApplied(jobId)) {
+      const job = this.selectedJob
+
+      if (this.hasApplied(job.id)) {
         alert('You have already applied for this job.')
         return
       }
 
-      const job = this.jobs.find((j) => j.id === jobId)
-      if (!job) {
-        alert('Job not found.')
-        return
-      }
+      this.applyingJobId = job.id
 
-      this.applyingJobId = jobId
       try {
+        let resumeUrl = ''
+
+        if (formData.resumeFile) {
+          const file = formData.resumeFile
+          const safeFileName = file.name.replace(/\s+/g, '_')
+          const filePath = `resumes/${this.user.uid}/${job.id}-${Date.now()}-${safeFileName}`
+          const storageRef = ref(storage, filePath)
+
+          await uploadBytes(storageRef, file)
+          resumeUrl = await getDownloadURL(storageRef)
+        }
+
         const appRef = collection(db, 'applications')
         await addDoc(appRef, {
-          jobId: jobId,
+          jobId: job.id,
           hrId: job.hrId,
           candidateId: this.user.uid,
           candidateName: this.user.fullName,
           candidateEmail: this.user.email,
+          phone: formData.phone,
+          resumeUrl: resumeUrl,
+          coverLetter: formData.coverLetter,
           status: 'Pending',
           createdAt: serverTimestamp()
         })
 
+        await this.fetchApplications()
+        this.closeApplicationModal()
         alert('Application submitted successfully!')
-        this.fetchApplications()
       } catch (error) {
         console.error('Error applying for job:', error)
         alert('Failed to submit application')
@@ -380,14 +406,12 @@ computed: {
         this.applyingJobId = null
       }
     },
-
     hasApplied(jobId) {
       return this.applications.some((app) => app.jobId === jobId)
     },
 
-    getJobTitle(jobId) {
-      const job = this.jobs.find((j) => j.id === jobId)
-      return job ? job.title : 'Unknown Job'
+    getJobTitle(app) {
+      return app.jobTitle || 'Unknown Job'
     },
 
     formatDate(timestamp) {
@@ -396,6 +420,7 @@ computed: {
     },
 
     clearFilters() {
+      this.searchInput = ''
       this.searchQuery = ''
       this.department = 'All Departments'
       this.location = 'All Locations'
@@ -428,7 +453,22 @@ computed: {
         console.error('Logout error:', error)
         alert('Logout failed')
       }
-    }
+    },
+    
+    openApplicationModal(job) {
+      if (this.hasApplied(job.id)) {
+        alert('You have already applied for this job.')
+        return
+      }
+
+      this.selectedJob = job
+      this.showApplicationModal = true
+    },
+
+    closeApplicationModal() {
+      this.showApplicationModal = false
+      this.selectedJob = null
+    },
   }
 }
 </script>

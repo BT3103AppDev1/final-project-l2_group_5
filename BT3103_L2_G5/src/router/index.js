@@ -5,9 +5,10 @@ import ForgotPassword from '@/components/auth/ForgotPassword.vue'
 import SignUp from '@/components/auth/SignUp.vue'
 import CandidateDashboard from '@/components/dashboard/CandidateDashboard.vue'
 import HRDashboard from '@/components/dashboard/HRDashboard.vue'
-import CreateJob from '@/components/createJob/CreateJob.vue'
+import CreateJob from '@/components/createJob/createJob.vue'
 import CandidatesView from '@/components/candidates/CandidatesView.vue'
 import EditJobView from '@/components/createJob/EditJob.vue'
+import AllCandidatesView from '@/components/candidates/AllCandidatesView.vue'
 
 
 const routes = [
@@ -56,7 +57,12 @@ const routes = [
     name: 'JobCandidates',
     component: CandidatesView,
     props: true
-  }
+  },
+  {
+  path: '/hr/candidates',
+  component: AllCandidatesView,
+  meta: { requiresAuth: true, role: 'hr' }
+  },
 ]
 
 const router = createRouter({

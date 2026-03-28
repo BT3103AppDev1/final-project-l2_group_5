@@ -211,19 +211,11 @@ onMounted(() => {
       jobTitles.value[d.id] = d.data().title
     })
 
-    // Fetch all applications
-    if (jobIds.length > 0) {
-      const chunks = []
-      for (let i = 0; i < jobIds.length; i += 30) chunks.push(jobIds.slice(i, i + 30))
-      const all = []
-      for (const chunk of chunks) {
-        const snap = await getDocs(
-          query(collection(db, 'applications'), where('jobId', 'in', chunk))
-        )
-        snap.forEach(d => all.push({ id: d.id, ...d.data() }))
-      }
-      allCandidates.value = all
-    }
+    // Directly query applications by hrId
+    const appSnap = await getDocs(
+      query(collection(db, 'applications'), where('hrId', '==', user.uid))
+    )
+    allCandidates.value = appSnap.docs.map(d => ({ id: d.id, ...d.data() }))
 
     loading.value = false
   })

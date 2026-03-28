@@ -10,6 +10,7 @@ import CandidatesView from '@/components/candidates/CandidatesView.vue'
 import EditJobView from '@/components/jobs/EditJob.vue'
 import AllCandidatesView from '@/components/candidates/AllCandidatesView.vue'
 import MyApplications from '@/components/application/MyApplications.vue'
+import SwipeView from '@/components/candidates/SwipeView.vue'
 
 
 const routes = [
@@ -67,6 +68,11 @@ const routes = [
   {
   path: '/hr/candidates',
   component: AllCandidatesView,
+  meta: { requiresAuth: true, role: 'hr' }
+  },
+  {
+  path: '/hr/screen',
+  component: SwipeView,
   meta: { requiresAuth: true, role: 'hr' }
   },
 ]

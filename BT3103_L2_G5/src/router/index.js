@@ -5,10 +5,12 @@ import ForgotPassword from '@/components/auth/ForgotPassword.vue'
 import SignUp from '@/components/auth/SignUp.vue'
 import CandidateDashboard from '@/components/dashboard/CandidateDashboard.vue'
 import HRDashboard from '@/components/dashboard/HRDashboard.vue'
-import CreateJob from '@/components/createJob/createJob.vue'
+import CreateJob from '@/components/jobs/CreateJob.vue'
 import CandidatesView from '@/components/candidates/CandidatesView.vue'
-import EditJobView from '@/components/createJob/EditJob.vue'
+import EditJobView from '@/components/jobs/EditJob.vue'
 import AllCandidatesView from '@/components/candidates/AllCandidatesView.vue'
+import MyApplications from '@/components/application/MyApplications.vue'
+import SwipeView from '@/components/candidates/SwipeView.vue'
 
 
 const routes = [
@@ -37,6 +39,11 @@ const routes = [
     meta: { requiresAuth: true, role: 'candidate' }
   },
   {
+  path: '/applications',
+  component: MyApplications,
+  meta: { requiresAuth: true, role: 'candidate' }
+},
+  {
     path: '/hr-dashboard',
     component: HRDashboard,
     meta: { requiresAuth: true, role: 'hr' }
@@ -61,6 +68,11 @@ const routes = [
   {
   path: '/hr/candidates',
   component: AllCandidatesView,
+  meta: { requiresAuth: true, role: 'hr' }
+  },
+  {
+  path: '/hr/screen',
+  component: SwipeView,
   meta: { requiresAuth: true, role: 'hr' }
   },
 ]

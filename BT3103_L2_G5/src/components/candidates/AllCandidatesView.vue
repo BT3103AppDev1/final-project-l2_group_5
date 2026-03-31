@@ -33,13 +33,22 @@
     </aside>
 
     <main class="main">
-      <header class="topbar">
+      <<header class="topbar">
         <div>
           <p class="topbar__breadcrumb">HR Portal / Candidates</p>
           <h1 class="topbar__title">All Candidates</h1>
           <p class="topbar__sub">Every applicant across all your job postings</p>
         </div>
-      </header>
+        <router-link
+          v-if="pendingCount > 0"
+          to="/hr/screen"
+          class="btn btn--screen"
+        >
+          <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/></svg>
+          Screen Candidates
+          <span class="screen-badge">{{ pendingCount }}</span>
+        </router-link>
+     </header>
 
       <!-- Stats -->
       <section class="stats-grid">
@@ -109,7 +118,7 @@
 
         <div v-else-if="filteredCandidates.length === 0" class="empty-state">
           <svg viewBox="0 0 64 64" fill="none" width="64" height="64"><circle cx="32" cy="32" r="30" stroke="#E2E8F6" stroke-width="2"/><path d="M22 32h20M32 22v20" stroke="#6B7A99" stroke-width="2" stroke-linecap="round"/></svg>
-          <p>No candidates found.</p>
+          <p>{{ candidates.length === 0 ? 'No applications yet.' : 'No candidates match this filter.' }}</p>
         </div>
 
         <div v-else class="candidate-list">
@@ -220,27 +229,19 @@ onMounted(() => {
       userInitials.value = data.fullName?.split(' ').map(w => w[0]).slice(0,2).join('') || 'HR'
     }
 
-    // Fetch all jobs by this HR user
-    const jobsSnap = await getDocs(query(collection(db, 'jobs'), where('hrId', '==', user.uid)))
-    const jobIds = []
+    // Fetch jobs to build jobTitles map
+    const jobsSnap = await getDocs(
+      query(collection(db, 'jobs'), where('hrId', '==', user.uid))
+    )
     jobsSnap.forEach(d => {
-      jobIds.push(d.id)
       jobTitles.value[d.id] = d.data().title
     })
 
-    // Fetch all applications for those jobs
-    if (jobIds.length > 0) {
-      // Firestore 'in' query supports up to 30 items
-      const chunks = []
-      for (let i = 0; i < jobIds.length; i += 30) chunks.push(jobIds.slice(i, i + 30))
-
-      const allCandidates = []
-      for (const chunk of chunks) {
-        const appSnap = await getDocs(query(collection(db, 'applications'), where('jobId', 'in', chunk)))
-        appSnap.forEach(d => allCandidates.push({ id: d.id, ...d.data() }))
-      }
-      candidates.value = allCandidates
-    }
+    // Directly query applications by hrId — no need for two-step join
+    const appSnap = await getDocs(
+      query(collection(db, 'applications'), where('hrId', '==', user.uid))
+    )
+    candidates.value = appSnap.docs.map(d => ({ id: d.id, ...d.data() }))
 
     loading.value = false
   })
@@ -311,6 +312,31 @@ const filteredCandidates = computed(() => {
   display: flex; min-height: 100vh; background: var(--cs-bg);
   font-family: 'DM Sans', -apple-system, sans-serif;
 }
+
+.btn--screen {
+  background: var(--cs-blue);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all .15s;
+  white-space: nowrap;
+}
+.btn--screen:hover { background: #1460d4; box-shadow: 0 4px 12px rgba(30,111,235,.35); }
+.screen-badge {
+  background: rgba(255,255,255,.25);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 20px;
+}
+
 .sidebar { width: 240px; flex-shrink: 0; background: var(--cs-navy); display: flex; flex-direction: column; padding: 24px 16px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
 .sidebar__logo { display: flex; align-items: center; gap: 10px; padding: 0 8px 28px; border-bottom: 1px solid rgba(255,255,255,.1); margin-bottom: 20px; }
 .logo-icon { font-size: 22px; color: var(--cs-teal); }

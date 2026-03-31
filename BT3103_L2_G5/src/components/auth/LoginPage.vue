@@ -143,6 +143,14 @@ export default {
         
         if (userSnapshot.exists()) {
           const userData = userSnapshot.data()
+          
+          // Validate that the selected role matches the user's actual role
+          if (userData.role !== this.role) {
+            alert(`Error: You are registered as a ${userData.role === 'hr' ? 'HR' : 'Candidate'} user. Please select the correct login portal.`)
+            this.isLoading = false
+            return
+          }
+          
           console.log('User signed in:', userData)
           alert(`Signed in successfully as ${userData.role === 'hr' ? 'HR' : 'Candidate'}`)
           // Redirect to appropriate dashboard based on role
@@ -153,7 +161,13 @@ export default {
         }
       } catch (error) {
         console.error('Sign in error:', error.message)
-        alert(`Sign in failed: ${error.message}`)
+        
+        // Handle specific Firebase auth errors
+        if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+          alert('Invalid username/password')
+        } else {
+          alert(`Sign in failed: ${error.message}`)
+        }
       } finally {
         this.isLoading = false
       }

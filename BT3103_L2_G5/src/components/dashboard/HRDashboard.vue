@@ -60,7 +60,6 @@
           <div>
             <p class="stat-card__label">Active Job Postings</p>
             <p class="stat-card__value">{{ stats.activeJobs }}</p>
-            <p class="stat-card__delta stat-card__delta--up">↑ +2 this week</p>
           </div>
         </div>
 
@@ -71,7 +70,6 @@
           <div>
             <p class="stat-card__label">Total Applicants</p>
             <p class="stat-card__value">{{ stats.totalApplicants }}</p>
-            <p class="stat-card__delta stat-card__delta--up">↑ +34 this week</p>
           </div>
         </div>
 
@@ -82,7 +80,6 @@
           <div>
             <p class="stat-card__label">Interviews Scheduled</p>
             <p class="stat-card__value">{{ stats.interviews }}</p>
-            <p class="stat-card__delta stat-card__delta--neutral">— Stable</p>
           </div>
         </div>
 
@@ -93,7 +90,6 @@
           <div>
             <p class="stat-card__label">Positions Filled</p>
             <p class="stat-card__value">{{ stats.filled }}</p>
-            <p class="stat-card__delta stat-card__delta--up">↑ +1 today</p>
           </div>
         </div>
       </section>
@@ -160,20 +156,23 @@
               <p class="pipeline-label">Applicant Pipeline</p>
               <div class="pipeline-stats">
                 <div class="pipeline-stat">
-                  <span class="pipeline-stat__num">{{ job.totalApplicants || 0 }}</span>
+                  <span class="pipeline-stat__num">{{ jobStats[job.id]?.total || 0 }}</span>
                   <span class="pipeline-stat__label">Total</span>
                 </div>
-                <div class="pipeline-stat">
-                  <span class="pipeline-stat__num">{{ job.reviewed || 0 }}</span>
-                  <span class="pipeline-stat__label">Reviewed</span>
+                
+                <div class="pipeline-stat pipeline-stat--amber">
+                  <span class="pipeline-stat__num">{{ jobStats[job.id]?.pending || 0 }}</span>
+                  <span class="pipeline-stat__label">Pending</span>
                 </div>
+                
                 <div class="pipeline-stat pipeline-stat--green">
-                  <span class="pipeline-stat__num">{{ job.shortlisted || 0 }}</span>
+                  <span class="pipeline-stat__num">{{ jobStats[job.id]?.shortlisted || 0 }}</span>
                   <span class="pipeline-stat__label">Shortlisted</span>
                 </div>
-                <div class="pipeline-stat pipeline-stat--blue">
-                  <span class="pipeline-stat__num">{{ job.interviews || 0 }}</span>
-                  <span class="pipeline-stat__label">Interviews</span>
+
+                <div class="pipeline-stat pipeline-stat--red">
+                  <span class="pipeline-stat__num">{{ jobStats[job.id]?.rejected || 0 }}</span>
+                  <span class="pipeline-stat__label">Rejected</span>
                 </div>
               </div>
             </div>
@@ -251,6 +250,7 @@
 
   // ─── State ────────────────────────────────────────────────────────────────
   const jobs          = ref([])
+  const jobStats      = ref({}) // Holds calculated stats from applications
   const loading       = ref(true)
   const activeTab     = ref('All')
   const searchQuery   = ref('')
@@ -262,10 +262,10 @@
   const stats = ref({ activeJobs: 0, totalApplicants: 0, interviews: 0, filled: 0 })
 
   let unsubscribeJobs = null
+  let unsubscribeApps = null
 
   // ─── Lifecycle ────────────────────────────────────────────────────────────
   onMounted(() => {
-    // Use onAuthStateChanged to prevent race conditions on page refresh
     onAuthStateChanged(auth, async (user) => {
       if (user) {
         // 1. Fetch current user's name
@@ -276,13 +276,11 @@
           userInitials.value = (data.firstName?.[0] || '') + (data.lastName?.[0] || '') || 'HR'
         }
 
-        // The query now filters by hrId
-        const q = query(collection(db, 'jobs'), where('hrId', '==', user.uid))
-        
-        unsubscribeJobs = onSnapshot(q, snapshot => {
+        // 2. Fetch Jobs
+        const qJobs = query(collection(db, 'jobs'), where('hrId', '==', user.uid))
+        unsubscribeJobs = onSnapshot(qJobs, snapshot => {
           let fetchedJobs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }))
           
-          // Sort locally by date to prevent Firebase requiring a composite index
           fetchedJobs.sort((a, b) => {
             const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : Date.now()
             const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : Date.now()
@@ -290,12 +288,36 @@
           })
 
           jobs.value = fetchedJobs
-          computeStats()
+          computeOverallStats()
           loading.value = false
         }, (error) => {
           console.error("Error fetching jobs:", error)
           loading.value = false
         })
+
+        // 3. Fetch Applications to calculate dynamic pipeline stats
+        const qApps = query(collection(db, 'applications'), where('hrId', '==', user.uid))
+        unsubscribeApps = onSnapshot(qApps, snapshot => {
+          const countsMap = {}
+          
+          snapshot.docs.forEach(doc => {
+            const app = doc.data()
+            const jId = app.jobId
+            
+            if (!countsMap[jId]) {
+              countsMap[jId] = { total: 0, pending: 0, shortlisted: 0, rejected: 0 }
+            }
+            
+            countsMap[jId].total += 1
+            if (app.status === 'Pending') countsMap[jId].pending += 1
+            if (app.status === 'Shortlisted') countsMap[jId].shortlisted += 1
+            if (app.status === 'Rejected') countsMap[jId].rejected += 1
+          })
+          
+          jobStats.value = countsMap
+          computeOverallStats() 
+        })
+
       } else {
         router.push('/login')
       }
@@ -304,6 +326,7 @@
 
   onUnmounted(() => {
     if (unsubscribeJobs) unsubscribeJobs()
+    if (unsubscribeApps) unsubscribeApps()
   })
 
   // ─── Computed ──────────────────────────────────────────────────────────────
@@ -336,11 +359,7 @@
     
     if (confirmClose) {
       try {
-        await updateDoc(doc(db, 'jobs', jobId), {
-          status: 'closed'
-        })
-        // You don't even need an alert here because the UI will instantly
-        // react and move it to the 'Closed' tab thanks to your real-time listener!
+        await updateDoc(doc(db, 'jobs', jobId), { status: 'closed' })
       } catch (error) {
         console.error('Error closing job:', error)
         alert('Failed to close the job posting.')
@@ -348,12 +367,20 @@
     }
   }
 
-  function computeStats() {
-    const active  = jobs.value.filter(j => j.status === 'active')
-    stats.value.activeJobs       = active.length
-    stats.value.totalApplicants  = jobs.value.reduce((s, j) => s + (j.totalApplicants || 0), 0)
-    stats.value.interviews       = jobs.value.reduce((s, j) => s + (j.interviews || 0), 0)
-    stats.value.filled           = jobs.value.filter(j => j.status === 'closed').length
+  function computeOverallStats() {
+    const active = jobs.value.filter(j => j.status === 'active')
+    stats.value.activeJobs = active.length
+    stats.value.filled     = jobs.value.filter(j => j.status === 'closed').length
+    
+    let totalApps = 0
+    let totalShortlisted = 0
+    Object.values(jobStats.value).forEach(stat => {
+      totalApps += stat.total
+      totalShortlisted += stat.shortlisted 
+    })
+    
+    stats.value.totalApplicants = totalApps
+    stats.value.interviews      = totalShortlisted 
   }
 
   function formatDate(ts) {
@@ -600,6 +627,8 @@
 .pipeline-stat__label { font-size: 11px; color: var(--cs-muted); }
 .pipeline-stat--green .pipeline-stat__num { color: var(--cs-green); }
 .pipeline-stat--blue  .pipeline-stat__num { color: var(--cs-blue); }
+.pipeline-stat--amber .pipeline-stat__num { color: var(--cs-amber); }
+.pipeline-stat--red   .pipeline-stat__num { color: var(--cs-red); }
 
 .job-card__actions { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex-shrink: 0; }
 .status-pill { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 20px; }

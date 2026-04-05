@@ -160,22 +160,25 @@
                 :to="`/hr/jobs/${candidate.jobId}/candidates`"
                 class="btn btn--ghost btn--sm"
               >View Job →</router-link>
+              
               <button
                 v-if="candidate.status === 'Pending'"
                 class="btn btn--shortlist"
-                @click="updateStatus(candidate.id, 'Shortlisted')"
+                @click="updateStatus(candidate.id, candidate.jobId, 'Shortlisted', candidate.status)"
                 :disabled="processing === candidate.id"
               >✓ Shortlist</button>
+              
               <button
                 v-if="candidate.status === 'Pending'"
                 class="btn btn--reject"
-                @click="updateStatus(candidate.id, 'Rejected')"
+                @click="updateStatus(candidate.id, candidate.jobId, 'Rejected', candidate.status)"
                 :disabled="processing === candidate.id"
               >✕ Reject</button>
+              
               <button
                 v-if="candidate.status !== 'Pending'"
                 class="btn btn--ghost btn--sm"
-                @click="updateStatus(candidate.id, 'Pending')"
+                @click="updateStatus(candidate.id, candidate.jobId, 'Pending', candidate.status)"
                 :disabled="processing === candidate.id"
               >↩ Undo</button>
             </div>
@@ -210,7 +213,7 @@ import { auth, db } from '@/firebaseConfig'
 import { signOut, onAuthStateChanged } from 'firebase/auth'
 import {
   collection, query, where, getDocs,
-  doc, updateDoc, getDoc
+  doc, updateDoc, getDoc, onSnapshot // 👈 1. Added onSnapshot
 } from 'firebase/firestore'
 
 const router = useRouter()
@@ -236,7 +239,7 @@ onMounted(() => {
       userInitials.value = data.fullName?.split(' ').map(w => w[0]).slice(0,2).join('') || 'HR'
     }
 
-    // Fetch jobs to build jobTitles map
+    // Fetch jobs to build jobTitles map (getDocs is fine here)
     const jobsSnap = await getDocs(
       query(collection(db, 'jobs'), where('hrId', '==', user.uid))
     )
@@ -244,23 +247,46 @@ onMounted(() => {
       jobTitles.value[d.id] = d.data().title
     })
 
-    // Directly query applications by hrId — no need for two-step join
-    const appSnap = await getDocs(
-      query(collection(db, 'applications'), where('hrId', '==', user.uid))
-    )
-    candidates.value = appSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+    // 👈 2. LIVE LISTENER: Replaced getDocs with onSnapshot
+    const appQuery = query(collection(db, 'applications'), where('hrId', '==', user.uid))
+    
+    onSnapshot(appQuery, (snapshot) => {
+      // This automatically triggers on load AND whenever you swipe a card!
+      candidates.value = snapshot.docs.map(d => ({ id: d.id, ...d.data() }))
+      loading.value = false
+    }, (error) => {
+      console.error("Error fetching live candidates:", error)
+      loading.value = false
+    })
 
-    loading.value = false
   })
 })
 
-async function updateStatus(applicationId, newStatus) {
+async function updateStatus(applicationId, jobId, newStatus, oldStatus) {
   processing.value = applicationId
   try {
+    // 1. Update the candidate's actual application status
     await updateDoc(doc(db, 'applications', applicationId), { status: newStatus })
-    const idx = candidates.value.findIndex(c => c.id === applicationId)
-    if (idx !== -1) candidates.value[idx].status = newStatus
+
+    // 2. Do the math for the Job document
+    const jobRef = doc(db, 'jobs', jobId)
+    const statsUpdate = {}
+
+    // Math for Shortlisted (+1 if they just got it, -1 if they lost it)
+    if (newStatus === 'Shortlisted') statsUpdate.shortlisted = increment(1)
+    if (oldStatus === 'Shortlisted') statsUpdate.shortlisted = increment(-1)
+
+    // Math for Rejected (+1 if they just got it, -1 if they lost it)
+    if (newStatus === 'Rejected') statsUpdate.rejected = increment(1)
+    if (oldStatus === 'Rejected') statsUpdate.rejected = increment(-1)
+
+    // 3. Send the math to Firestore
+    if (Object.keys(statsUpdate).length > 0) {
+      await updateDoc(jobRef, statsUpdate)
+    }
+
   } catch (e) {
+    console.error(e)
     alert('Failed to update status.')
   } finally {
     processing.value = null
@@ -294,7 +320,6 @@ const tabCounts = computed(() => ({
 
 const filteredCandidates = computed(() => {
   if (activeTab.value === 'All') return candidates.value
-  return candidates.value.filter(c => c.status === activeTab.value)
 })
 </script>
 
@@ -428,4 +453,3 @@ const filteredCandidates = computed(() => {
 @media (max-width: 1100px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 768px) { .sidebar { display: none; } .main { padding: 20px 16px; } .candidate-card { flex-direction: column; align-items: flex-start; } }
 </style>
-EOF

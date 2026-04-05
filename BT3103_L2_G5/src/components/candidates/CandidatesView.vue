@@ -42,7 +42,20 @@
           <h1 class="topbar__title">{{ jobTitle || 'Candidates' }}</h1>
           <p class="topbar__sub">Viewing applicants for this job posting</p>
         </div>
-        <router-link to="/hr-dashboard" class="btn btn--ghost">← Back to Dashboard</router-link>
+        
+        <div style="display: flex; gap: 12px; align-items: center;">
+          <router-link to="/hr-dashboard" class="btn btn--ghost">← Back to Dashboard</router-link>
+          
+          <router-link
+            v-if="pendingCount > 0"
+            :to="`/hr/screen?jobId=${route.params.id}`" 
+            class="btn btn--screen"
+          >
+            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/></svg>
+            Screen Candidates
+            <span class="screen-badge">{{ pendingCount }}</span>
+          </router-link>
+        </div>
       </header>
 
       <!-- Stats row -->
@@ -185,31 +198,43 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
-import { db } from '@/firebaseConfig'
+import { useRoute, useRouter } from 'vue-router'
+import { auth, db } from '@/firebaseConfig' // 👈 Added auth
+import { onAuthStateChanged } from 'firebase/auth' // 👈 Added auth listener
 import {
   collection, query, where, getDocs,
   doc, updateDoc, getDoc
 } from 'firebase/firestore'
 
 const route = useRoute()
+const router = useRouter()
 
-// ── State ──────────────────────────────────────────────────────────────────
+// ── State ──
 const candidates = ref([])
 const loading    = ref(true)
 const processing = ref(null)
 const activeTab  = ref('All')
 const jobTitle   = ref('')
 
-// ── Lifecycle ──────────────────────────────────────────────────────────────
-onMounted(async () => {
-  const jobId = route.params.id
-  await fetchJobTitle(jobId)
-  await fetchCandidates(jobId)
-  loading.value = false
+// ── Lifecycle ──
+onMounted(() => {
+  // 👈 1. Wait for Firebase to confirm the user is logged in
+  onAuthStateChanged(auth, async (user) => {
+    if (!user) {
+      router.push('/login')
+      return
+    }
+
+    const jobId = route.params.id // (Change to .jobId if your router uses :jobId)
+    
+    await fetchJobTitle(jobId)
+    await fetchCandidates(jobId, user.uid) // 👈 Pass the user ID down
+    
+    loading.value = false
+  })
 })
 
-// ── Methods ────────────────────────────────────────────────────────────────
+// ── Methods ──
 async function fetchJobTitle(jobId) {
   try {
     const snap = await getDoc(doc(db, 'jobs', jobId))
@@ -219,9 +244,14 @@ async function fetchJobTitle(jobId) {
   }
 }
 
-async function fetchCandidates(jobId) {
+async function fetchCandidates(jobId, userId) {
   try {
-    const q = query(collection(db, 'applications'), where('jobId', '==', jobId))
+    // 👈 2. Add hrId to the query to satisfy Firestore Security Rules
+    const q = query(
+      collection(db, 'applications'), 
+      where('jobId', '==', jobId),
+      where('hrId', '==', userId) 
+    )
     const snap = await getDocs(q)
     candidates.value = snap.docs.map(d => ({ id: d.id, ...d.data() }))
   } catch (e) {
@@ -257,7 +287,7 @@ function formatDate(ts) {
   } catch { return 'N/A' }
 }
 
-// ── Computed ───────────────────────────────────────────────────────────────
+// ── Computed ──
 const filteredCandidates = computed(() => {
   if (activeTab.value === 'All') return candidates.value
   return candidates.value.filter(c => c.status === activeTab.value)
@@ -342,6 +372,35 @@ const tabCounts = computed(() => ({
 .btn--reject:hover:not(:disabled) { background: #fecaca; }
 .btn--shortlist:disabled, .btn--reject:disabled, .btn--ghost:disabled { opacity: .6; cursor: not-allowed; }
 
+.btn--screen {
+  background: var(--cs-blue);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all .15s;
+  white-space: nowrap;
+}
+
+.btn--screen:hover { 
+  background: #1460d4; 
+  box-shadow: 0 4px 12px rgba(30,111,235,.35); 
+}
+
+.screen-badge {
+  background: rgba(255,255,255,.25);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 20px;
+}
+
 /* ── Stats ── */
 .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
 .stat-card { background: var(--cs-surface); border: 1px solid var(--cs-border); border-radius: var(--radius); padding: 20px; display: flex; align-items: flex-start; gap: 14px; box-shadow: var(--shadow-sm); }
@@ -364,6 +423,33 @@ const tabCounts = computed(() => ({
 .tab:hover { background: var(--cs-bg); color: var(--cs-text); }
 .tab--active { background: var(--cs-bg); color: var(--cs-blue); font-weight: 600; }
 .tab-count { font-size: 11px; background: var(--cs-border); color: var(--cs-muted); padding: 1px 6px; border-radius: 20px; margin-left: 4px; }
+
+.btn--screen {
+  background: var(--cs-blue);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all .15s;
+  white-space: nowrap;
+}
+.btn--screen:hover { 
+  background: #1460d4; 
+  box-shadow: 0 4px 12px rgba(30,111,235,.35); 
+}
+.screen-badge {
+  background: rgba(255,255,255,.25);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 20px;
+}
 
 /* ── Candidate list ── */
 .candidate-list { display: flex; flex-direction: column; gap: 12px; }

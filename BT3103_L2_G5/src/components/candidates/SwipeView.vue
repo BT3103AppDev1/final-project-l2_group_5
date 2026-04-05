@@ -4,7 +4,10 @@
     <!-- Top bar -->
     <nav class="swipe-nav">
       <div class="swipe-nav__left">
-        <router-link to="/hr/candidates" class="exit-btn">
+        <router-link 
+          :to="route.query.jobId ? `/hr/jobs/${route.query.jobId}/candidates` : '/hr/candidates'" 
+          class="exit-btn"
+        >
           <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18"><path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd"/></svg>
           Exit Screening
         </router-link>
@@ -31,8 +34,12 @@
         <div class="done-circle">🎉</div>
         <h2>All caught up!</h2>
         <p>{{ shortlistedCount }} shortlisted · {{ rejectedCount }} rejected · {{ reviewedCount }} total reviewed</p>
-        <router-link to="/hr/candidates" class="action-btn action-btn--primary">
-          ← Back to All Candidates
+        
+        <router-link 
+          :to="route.query.jobId ? `/hr/jobs/${route.query.jobId}/candidates` : '/hr/candidates'" 
+          class="action-btn action-btn--primary"
+        >
+          ← {{ route.query.jobId ? 'Back to Job Candidates' : 'Back to All Candidates' }}
         </router-link>
       </div>
 
@@ -42,12 +49,22 @@
         <!-- Job selector -->
         <div class="job-selector">
           <label class="job-selector__label">Screening job:</label>
-          <select v-model="selectedJobId" class="job-selector__select" @change="filterCandidates">
+          
+          <select 
+            v-if="!isSingleJobMode" 
+            v-model="selectedJobId" 
+            class="job-selector__select"
+          >
             <option value="all">All Jobs ({{ allPending.length }} pending)</option>
             <option v-for="(title, jobId) in jobTitles" :key="jobId" :value="jobId">
               {{ title }} ({{ pendingByJob[jobId] || 0 }} pending)
             </option>
           </select>
+
+          <div v-else class="job-selector__locked">
+            {{ jobTitles[selectedJobId] || 'Loading...' }} 
+            <span class="locked-count">({{ pendingCandidates.length }} pending)</span>
+          </div>
         </div>
 
         <!-- Progress bar -->
@@ -146,7 +163,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { auth, db } from '@/firebaseConfig'
 import { onAuthStateChanged } from 'firebase/auth'
 import {
@@ -154,6 +171,7 @@ import {
   doc, updateDoc, getDoc
 } from 'firebase/firestore'
 
+const route = useRoute()
 const router = useRouter()
 
 // ── State ──────────────────────────────────────────────────────────────────
@@ -161,12 +179,14 @@ const allCandidates  = ref([])
 const jobTitles      = ref({})
 const loading        = ref(true)
 const processing     = ref(false)
-const selectedJobId  = ref('all')
+const selectedJobId  = ref(route.query.jobId || 'all')
 const lastDecision   = ref(null) // { id, previousStatus }
 const exitLeft       = ref(false)
 const exitRight      = ref(false)
 
 // ── Computed ───────────────────────────────────────────────────────────────
+const isSingleJobMode = computed(() => !!route.query.jobId)
+
 const allPending = computed(() =>
   allCandidates.value.filter(c => c.status === 'Pending')
 )
@@ -323,6 +343,18 @@ function formatDate(ts) {
   font-family: 'DM Sans', sans-serif;
   display: flex;
   flex-direction: column;
+}
+.job-selector__locked {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 700;
+  color: #1A2340;
+}
+.locked-count {
+  font-size: 13px;
+  font-weight: 500;
+  color: #6B7A99;
+  margin-left: 6px;
 }
 
 /* ── Nav ── */
@@ -628,4 +660,3 @@ function formatDate(ts) {
   .resume-iframe { height: 280px; }
 }
 </style>
-EOF

@@ -111,7 +111,10 @@ exports.onApplicationCreated = functions
   });
 
 exports.sendApplicationStatusEmail = onDocumentUpdated(
-  'applications/{applicationId}',
+  {
+    document: 'applications/{applicationId}',
+    region: 'asia-southeast1'
+  },
   async (event) => {
     const before = event.data.before.data()
     const after = event.data.after.data()

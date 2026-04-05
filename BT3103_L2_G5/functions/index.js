@@ -13,6 +13,7 @@ const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 const PDFParser = require("pdf2json");
 const https = require("https");
+const { onDocumentUpdated } = require('firebase-functions/v2/firestore')
 
 admin.initializeApp();
 
@@ -108,3 +109,61 @@ exports.onApplicationCreated = functions
       }).catch(() => {});
     }
   });
+
+exports.sendApplicationStatusEmail = onDocumentUpdated(
+  {
+    document: 'applications/{applicationId}',
+    region: 'asia-southeast1'
+  },
+  async (event) => {
+    const before = event.data.before.data()
+    const after = event.data.after.data()
+
+    if (!before || !after) return
+
+    const oldStatus = before.status
+    const newStatus = after.status
+
+    const validTransition =
+      oldStatus === 'Pending' &&
+      (newStatus === 'Accepted' || newStatus === 'Rejected')
+
+    if (!validTransition) return
+    if (after.emailNotificationSent === true) return
+
+    const candidateEmail = after.candidateEmail
+    const candidateName = after.candidateName || 'Applicant'
+    const jobTitle = after.jobTitle || 'the position'
+
+    let subject = ''
+    let html = ''
+
+    if (newStatus === 'Accepted') {
+      subject = 'Your application has been accepted'
+      html = `
+        <p>Hi ${candidateName},</p>
+        <p>We are pleased to inform you that your application for <b>${jobTitle}</b> has been <b>accepted</b>.</p>
+        <p>We will contact you with the next steps soon.</p>
+        <p>Best regards,<br/>Recruitment Team</p>
+      `
+    } else {
+      subject = 'Update on your job application'
+      html = `
+        <p>Hi ${candidateName},</p>
+        <p>Thank you for applying for <b>${jobTitle}</b>.</p>
+        <p>We would like to let you know that your application was <b>not selected</b> this time.</p>
+        <p>We appreciate your interest and wish you all the best.</p>
+        <p>Best regards,<br/>Recruitment Team</p>
+      `
+    }
+
+    await admin.firestore().collection('mail').add({
+      to: candidateEmail,
+      message: { subject, html }
+    })
+
+    await event.data.after.ref.update({
+      emailNotificationSent: true
+    })
+  }
+)

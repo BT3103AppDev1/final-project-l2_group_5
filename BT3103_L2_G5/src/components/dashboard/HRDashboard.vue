@@ -281,10 +281,27 @@
         unsubscribeJobs = onSnapshot(qJobs, snapshot => {
           let fetchedJobs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }))
           
+          // Define the sort priority for statuses
+          const statusPriority = {
+            'active': 1,
+            'inactive': 2, // Treated as Draft
+            'closed': 3
+          }
+
+          // Sort by status first, then by creation date (newest first)
           fetchedJobs.sort((a, b) => {
-            const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : Date.now()
-            const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : Date.now()
-            return timeB - timeA
+            const priorityA = statusPriority[a.status] || 4;
+            const priorityB = statusPriority[b.status] || 4;
+
+            // Primary Sort: Status
+            if (priorityA !== priorityB) {
+              return priorityA - priorityB;
+            }
+
+            // Secondary Sort: Date
+            const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+            const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+            return timeB - timeA;
           })
 
           jobs.value = fetchedJobs

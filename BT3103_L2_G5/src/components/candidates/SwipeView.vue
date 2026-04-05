@@ -134,16 +134,6 @@
           </button>
 
           <button
-            class="undo-btn"
-            @click="undoLast"
-            :disabled="!lastDecision || processing"
-            title="Undo last decision"
-          >
-            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd"/></svg>
-            Undo
-          </button>
-
-          <button
             class="decision-btn decision-btn--shortlist"
             @click="decide('Shortlisted')"
             :disabled="processing"
@@ -154,7 +144,7 @@
         </div>
 
         <!-- Keyboard hint -->
-        <p class="keyboard-hint">← Reject &nbsp;|&nbsp; → Shortlist &nbsp;|&nbsp; Space Skip &nbsp;|&nbsp; Z Undo</p>>
+        <p class="keyboard-hint">← Reject &nbsp;|&nbsp; → Shortlist &nbsp;|&nbsp; Space Skip &nbsp;|&nbsp; {{ isMac ? '⌘Z' : 'Ctrl+Z' }} Undo</p>
 
       </div>
     </main>
@@ -173,6 +163,7 @@ import {
 
 const route = useRoute()
 const router = useRouter()
+const isMac = navigator.platform.toUpperCase().includes('MAC')
 
 // ── State ──────────────────────────────────────────────────────────────────
 const allCandidates  = ref([])
@@ -253,7 +244,7 @@ function handleKeydown(e) {
   if (!currentCandidate.value || processing.value) return
   if (e.key === 'ArrowLeft')  decide('Rejected')
   if (e.key === 'ArrowRight') decide('Shortlisted')
-  if (e.key === 'z' || e.key === 'Z') undoLast()
+  if ((e.key === 'z' || e.key === 'Z') && (isMac ? e.metaKey : e.ctrlKey)) undoLast()
   if (e.key === ' ') {
     e.preventDefault() // prevents page from scrolling down
     skipCandidate()

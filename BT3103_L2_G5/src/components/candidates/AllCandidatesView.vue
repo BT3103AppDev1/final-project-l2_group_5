@@ -33,7 +33,7 @@
     </aside>
 
     <main class="main">
-      <<header class="topbar">
+      <header class="topbar">
         <div>
           <p class="topbar__breadcrumb">HR Portal / Candidates</p>
           <h1 class="topbar__title">All Candidates</h1>
@@ -102,13 +102,21 @@
                 class="tab"
                 :class="{ 'tab--active': activeTab === tab }"
                 @click="activeTab = tab"
-              >{{ tab }} <span class="tab-count">{{ tabCounts[tab] }}</span></button>
+              >
+                {{ tab }} <span class="tab-count">{{ tabCounts[tab] }}</span>
+              </button>
             </div>
           </div>
-          <div class="search-bar">
-            <svg viewBox="0 0 20 20" fill="currentColor" class="search-icon"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/></svg>
-            <input v-model="searchQuery" type="text" placeholder="Search candidates..." class="search-input" />
-          </div>
+          
+          <router-link
+            v-if="pendingCount > 0"
+            to="/hr/screen"
+            class="btn btn--screen"
+          >
+            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/></svg>
+            Screen Candidates
+            <span class="screen-badge">{{ pendingCount }}</span>
+          </router-link>
         </div>
 
         <div v-if="loading" class="loading-state">
@@ -212,7 +220,6 @@ const jobTitles      = ref({})
 const loading        = ref(true)
 const processing     = ref(null)
 const activeTab      = ref('All')
-const searchQuery    = ref('')
 const showLogoutModal = ref(false)
 const userName       = ref('HR User')
 const userInitials   = ref('HR')
@@ -286,17 +293,8 @@ const tabCounts = computed(() => ({
 }))
 
 const filteredCandidates = computed(() => {
-  let list = candidates.value
-  if (activeTab.value !== 'All') list = list.filter(c => c.status === activeTab.value)
-  if (searchQuery.value) {
-    const q = searchQuery.value.toLowerCase()
-    list = list.filter(c =>
-      c.candidateName?.toLowerCase().includes(q) ||
-      c.candidateEmail?.toLowerCase().includes(q) ||
-      jobTitles.value[c.jobId]?.toLowerCase().includes(q)
-    )
-  }
-  return list
+  if (activeTab.value === 'All') return candidates.value
+  return candidates.value.filter(c => c.status === activeTab.value)
 })
 </script>
 

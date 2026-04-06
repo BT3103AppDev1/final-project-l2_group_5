@@ -4,7 +4,6 @@
     "paths": {
       "@/*": ["src/*"]
     },
-    "jsx": "preserve",
     "moduleResolution": "node"
   },
   "include": ["src/**/*"],

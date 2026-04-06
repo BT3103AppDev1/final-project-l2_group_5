@@ -258,9 +258,8 @@ const publishJob = async () => {
       hrId:           auth.currentUser.uid, 
       createdAt:      serverTimestamp(),
       totalApplicants: 0,
-      reviewed:        0,
-      shortlisted:     0,
-      interviews:      0
+      shortlistedCount: 0,
+      rejectedCount:   0,
     })
     
     if (finalStatus === 'active') {

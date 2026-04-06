@@ -201,7 +201,7 @@ import { auth, db } from '@/firebaseConfig'
 import { signOut, onAuthStateChanged } from 'firebase/auth'
 import {
   collection, query, where, getDocs,
-  doc, updateDoc, getDoc
+  doc, updateDoc, getDoc, increment
 } from 'firebase/firestore'
 
 const router = useRouter()
@@ -248,10 +248,48 @@ onMounted(() => {
 async function updateStatus(applicationId, newStatus) {
   processing.value = applicationId
   try {
+    const candidateIdx = candidates.value.findIndex(c => c.id === applicationId)
+    if (candidateIdx === -1) return
+    
+    const candidate = candidates.value[candidateIdx]
+    const previousStatus = candidate.status
+    const jobId = candidate.jobId
+    
+    // Determine counter adjustments
+    let updates = { status: newStatus }
+    
+    // Removing from a counted status
+    if (previousStatus === 'Shortlisted') {
+      updates.shortlistedCount = increment(-1)
+    } else if (previousStatus === 'Rejected') {
+      updates.rejectedCount = increment(-1)
+    }
+    
+    // Adding to a counted status
+    if (newStatus === 'Shortlisted') {
+      updates.shortlistedCount = increment(1)
+    } else if (newStatus === 'Rejected') {
+      updates.rejectedCount = increment(1)
+    }
+    
+    // Update application
     await updateDoc(doc(db, 'applications', applicationId), { status: newStatus })
-    const idx = candidates.value.findIndex(c => c.id === applicationId)
-    if (idx !== -1) candidates.value[idx].status = newStatus
+    
+    // Update job counters
+    const jobRef = doc(db, 'jobs', jobId)
+    const counterUpdates = {}
+    if (previousStatus === 'Shortlisted') counterUpdates.shortlistedCount = increment(-1)
+    if (previousStatus === 'Rejected') counterUpdates.rejectedCount = increment(-1)
+    if (newStatus === 'Shortlisted') counterUpdates.shortlistedCount = increment(1)
+    if (newStatus === 'Rejected') counterUpdates.rejectedCount = increment(1)
+    
+    if (Object.keys(counterUpdates).length > 0) {
+      await updateDoc(jobRef, counterUpdates)
+    }
+    
+    candidates.value[candidateIdx].status = newStatus
   } catch (e) {
+    console.error('Error updating status:', e)
     alert('Failed to update status.')
   } finally {
     processing.value = null

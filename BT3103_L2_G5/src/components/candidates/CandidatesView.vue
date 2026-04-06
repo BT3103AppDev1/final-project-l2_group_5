@@ -272,13 +272,24 @@ async function updateStatus(applicationId, newStatus) {
     // Update application
     await updateDoc(doc(db, 'applications', applicationId), { status: newStatus })
     
-    // Update job counters
+    // Update job counters with safety checks
     const jobRef = doc(db, 'jobs', jobId)
+    const jobSnap = await getDoc(jobRef)
+    const jobData = jobSnap.data() || {}
+    
     const counterUpdates = {}
-    if (previousStatus === 'Shortlisted') counterUpdates.shortlistedCount = increment(-1)
-    if (previousStatus === 'Rejected') counterUpdates.rejectedCount = increment(-1)
-    if (newStatus === 'Shortlisted') counterUpdates.shortlistedCount = increment(1)
-    if (newStatus === 'Rejected') counterUpdates.rejectedCount = increment(1)
+    // Safely decrement from previous status
+    if (previousStatus === 'Shortlisted') {
+      counterUpdates.shortlistedCount = Math.max(0, (jobData.shortlistedCount || 0) - 1)
+    } else if (previousStatus === 'Rejected') {
+      counterUpdates.rejectedCount = Math.max(0, (jobData.rejectedCount || 0) - 1)
+    }
+    // Increment new status
+    if (newStatus === 'Shortlisted') {
+      counterUpdates.shortlistedCount = (jobData.shortlistedCount || 0) + 1
+    } else if (newStatus === 'Rejected') {
+      counterUpdates.rejectedCount = (jobData.rejectedCount || 0) + 1
+    }
     
     if (Object.keys(counterUpdates).length > 0) {
       await updateDoc(jobRef, counterUpdates)

@@ -115,7 +115,7 @@
               </p>
 
               <div class="job-footer">
-                <button class="details-btn" type="button" @click="viewJobDetails(job.id)">
+                <button class="details-btn" type="button">
                   View Details
                 </button>
 
@@ -174,7 +174,9 @@ import {
   addDoc,
   serverTimestamp,
   doc,
-  getDoc
+  getDoc,
+  updateDoc,
+  increment
 } from 'firebase/firestore'
 import { useRouter } from 'vue-router'
 import ApplicationFormModal from '@/components/application/ApplicationFormModal.vue'
@@ -368,12 +370,26 @@ export default {
           createdAt: serverTimestamp()
         })
 
-        await this.fetchApplications()
+        // Update the job's totalApplicants count
+        const jobRef = doc(db, 'jobs', job.id)
+        try {
+          await updateDoc(jobRef, {
+            totalApplicants: increment(1)
+          })
+        } catch (updateError) {
+          console.error('Error updating totalApplicants:', updateError)
+        }
+
+        // Close modal immediately to prevent double submissions
         this.closeApplicationModal()
+        
+        // Fetch applications after modal is closed
+        await this.fetchApplications()
         alert('Application submitted successfully!')
       } catch (error) {
         console.error('Error applying for job:', error)
         alert('Failed to submit application')
+        this.closeApplicationModal()
       } finally {
         this.applyingJobId = null
       }
@@ -397,13 +413,6 @@ export default {
       this.department = 'All Departments'
       this.location = 'All Locations'
       this.empType = 'All Types'
-    },
-
-    viewJobDetails(jobId) {
-      const job = this.jobs.find(j => j.id === jobId)
-      if (job) {
-        alert(`${job.title}\n\n${job.description}\n\nRequirements:\n${job.requirements || 'N/A'}`)
-      }
     },
 
     getDepartmentBadgeStyle(department) {

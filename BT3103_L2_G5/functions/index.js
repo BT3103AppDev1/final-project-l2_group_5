@@ -110,6 +110,7 @@ exports.onApplicationCreated = functions
     }
   });
 
+// Email notification function - updated to handle Shortlisted status (force redeploy)
 exports.sendApplicationStatusEmail = onDocumentUpdated(
   {
     document: 'applications/{applicationId}',
@@ -126,7 +127,7 @@ exports.sendApplicationStatusEmail = onDocumentUpdated(
 
     const validTransition =
       oldStatus === 'Pending' &&
-      (newStatus === 'Accepted' || newStatus === 'Rejected')
+      (newStatus === 'Accepted' || newStatus === 'Rejected' || newStatus === 'Shortlisted')
 
     if (!validTransition) return
     if (after.emailNotificationSent === true) return
@@ -138,7 +139,7 @@ exports.sendApplicationStatusEmail = onDocumentUpdated(
     let subject = ''
     let html = ''
 
-    if (newStatus === 'Accepted') {
+    if (newStatus === 'Accepted' || newStatus === 'Shortlisted') {
       subject = 'Your application has been accepted'
       html = `
         <p>Hi ${candidateName},</p>

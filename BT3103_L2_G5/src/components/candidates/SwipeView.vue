@@ -257,6 +257,7 @@ async function decide(newStatus) {
 
   const candidate = currentCandidate.value
   const previousStatus = candidate.status
+  const jobId = candidate.jobId
 
   // Animate card exit
   if (newStatus === 'Rejected') exitLeft.value = true
@@ -267,7 +268,32 @@ async function decide(newStatus) {
   exitRight.value = false
 
   try {
+    // Update application status
     await updateDoc(doc(db, 'applications', candidate.id), { status: newStatus })
+    
+    // Update job counters with safety checks
+    const jobRef = doc(db, 'jobs', jobId)
+    const jobSnap = await getDoc(jobRef)
+    const jobData = jobSnap.data() || {}
+    
+    const counterUpdates = {}
+    // Safely decrement from previous status
+    if (previousStatus === 'Shortlisted') {
+      counterUpdates.shortlistedCount = Math.max(0, (jobData.shortlistedCount || 0) - 1)
+    } else if (previousStatus === 'Rejected') {
+      counterUpdates.rejectedCount = Math.max(0, (jobData.rejectedCount || 0) - 1)
+    }
+    // Increment new status
+    if (newStatus === 'Shortlisted') {
+      counterUpdates.shortlistedCount = (jobData.shortlistedCount || 0) + 1
+    } else if (newStatus === 'Rejected') {
+      counterUpdates.rejectedCount = (jobData.rejectedCount || 0) + 1
+    }
+    
+    if (Object.keys(counterUpdates).length > 0) {
+      await updateDoc(jobRef, counterUpdates)
+    }
+    
     const idx = allCandidates.value.findIndex(c => c.id === candidate.id)
     if (idx !== -1) allCandidates.value[idx].status = newStatus
     lastDecision.value = { id: candidate.id, previousStatus }
@@ -283,13 +309,46 @@ async function undoLast() {
   if (!lastDecision.value || processing.value) return
   processing.value = true
   try {
+    const candidateIdx = allCandidates.value.findIndex(c => c.id === lastDecision.value.id)
+    if (candidateIdx === -1) return
+    
+    const candidate = allCandidates.value[candidateIdx]
+    const previousStatus = lastDecision.value.previousStatus
+    const currentStatus = candidate.status
+    const jobId = candidate.jobId
+    
+    // Update application
     await updateDoc(doc(db, 'applications', lastDecision.value.id), {
-      status: lastDecision.value.previousStatus
+      status: previousStatus
     })
-    const idx = allCandidates.value.findIndex(c => c.id === lastDecision.value.id)
-    if (idx !== -1) allCandidates.value[idx].status = lastDecision.value.previousStatus
+    
+    // Update job counters with safety checks
+    const jobRef = doc(db, 'jobs', jobId)
+    const jobSnap = await getDoc(jobRef)
+    const jobData = jobSnap.data() || {}
+    
+    const counterUpdates = {}
+    // Safely decrement from current status
+    if (currentStatus === 'Shortlisted') {
+      counterUpdates.shortlistedCount = Math.max(0, (jobData.shortlistedCount || 0) - 1)
+    } else if (currentStatus === 'Rejected') {
+      counterUpdates.rejectedCount = Math.max(0, (jobData.rejectedCount || 0) - 1)
+    }
+    // Increment to previous status
+    if (previousStatus === 'Shortlisted') {
+      counterUpdates.shortlistedCount = (jobData.shortlistedCount || 0) + 1
+    } else if (previousStatus === 'Rejected') {
+      counterUpdates.rejectedCount = (jobData.rejectedCount || 0) + 1
+    }
+    
+    if (Object.keys(counterUpdates).length > 0) {
+      await updateDoc(jobRef, counterUpdates)
+    }
+    
+    allCandidates.value[candidateIdx].status = previousStatus
     lastDecision.value = null
   } catch (e) {
+    console.error('Error undoing:', e)
     alert('Failed to undo.')
   } finally {
     processing.value = false
@@ -651,3 +710,4 @@ function formatDate(ts) {
   .resume-iframe { height: 280px; }
 }
 </style>
+EOF

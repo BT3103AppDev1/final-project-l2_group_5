@@ -115,7 +115,11 @@
               </p>
 
               <div class="job-footer">
-                <button class="details-btn" type="button">
+                <button 
+                class="details-btn" 
+                type="button"
+                @click="openJobDetailsModal(job)"
+                >
                   View Details
                 </button>
 
@@ -152,6 +156,62 @@
         </div>
       </footer>
     </main>
+    <div
+    v-if="showJobDetailsModal && selectedJobDetails"
+    class="job-details-overlay"
+    @click="closeJobDetailsModal"
+    >
+    <div class="job-details-modal" @click.stop>
+      <button class="job-details-close" @click="closeJobDetailsModal">
+        ×
+      </button>
+      <div class="job-details-header">
+        <span
+        class="dept-badge"
+        :style="getDepartmentBadgeStyle(selectedJobDetails.department)"
+        >
+        {{ selectedJobDetails.department || 'General' }}
+      </span>
+      <span class="job-type">
+        {{ selectedJobDetails.type || 'Full-time' }}
+      </span>
+    </div>
+    
+    <h2>{{ selectedJobDetails.title }}</h2>
+    <p class="job-details-company">{{ selectedJobDetails.company }}</p>
+
+    <div class="job-details-meta">
+      <span>📍 {{ selectedJobDetails.location || 'N/A' }}</span>
+      <span>{{ selectedJobDetails.type || 'Full-time' }}</span>
+    </div>
+
+    <div class="job-details-section">
+      <h3>Job Description</h3>
+      <p>{{ selectedJobDetails.description || 'No description provided.' }}</p>
+    </div>
+
+    <div class="job-details-section">
+      <h3>Requirements</h3>
+      <p>{{ selectedJobDetails.requirements || 'No requirements provided.' }}</p>
+    </div>
+
+    <div class="job-details-actions">
+      <button class="details-close-btn" @click="closeJobDetailsModal">
+        Close
+      </button>
+
+      <button
+        v-if="!hasApplied(selectedJobDetails.id)"
+        class="apply-btn"
+        @click="closeJobDetailsModal(); openApplicationModal(selectedJobDetails)"
+      >
+        Apply Now
+      </button>
+
+      <span v-else class="applied-badge">✓ Applied</span>
+    </div>
+  </div>
+</div>
     <ApplicationFormModal
       v-if="showApplicationModal && selectedJob"
       :job="selectedJob"
@@ -200,6 +260,8 @@ export default {
       applyingJobId: null,
       showApplicationModal: false,
       selectedJob: null,
+      showJobDetailsModal: false,
+      selectedJobDetails: null,
       searchInput: '',
       searchQuery: '',
       department: 'All Departments',
@@ -274,6 +336,16 @@ export default {
     })
   },
   methods: {
+    openJobDetailsModal(job) {
+      this.selectedJobDetails = job
+      this.showJobDetailsModal = true
+    },
+    
+    closeJobDetailsModal() {
+      this.showJobDetailsModal = false
+      this.selectedJobDetails = null
+    },
+
     applySearch() {
       this.searchQuery = this.searchInput
     },
@@ -596,9 +668,6 @@ export default {
 }
 
 .filter-bar {
-  position: sticky;
-  top: 76px;
-  z-index: 50;
   background: #ffffff;
   border-bottom: 1px solid #e5e7eb;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
@@ -714,6 +783,9 @@ export default {
   padding: 22px;
   transition: all 0.22s ease;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 
 .job-card:hover {
@@ -779,14 +851,17 @@ export default {
   color: #4b5563;
   line-height: 1.65;
   margin: 0;
-  min-height: 72px;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .job-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-top: 18px;
+  margin-top: auto;
   padding-top: 16px;
   border-top: 1px solid #f3f4f6;
   gap: 12px;
@@ -981,6 +1056,106 @@ export default {
 
 .footer-links button:hover {
   color: #374151;
+}
+
+.job-details-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 300;
+}
+
+.job-details-modal {
+  position: relative;
+  width: 100%;
+  max-width: 760px;
+  max-height: 85vh;
+  overflow-y: auto;
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 28px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+}
+
+.job-details-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  border: none;
+  background: transparent;
+  font-size: 1.6rem;
+  cursor: pointer;
+  color: #6b7280;
+}
+
+.job-details-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-right: 40px;
+}
+
+.job-details-modal h2 {
+  margin: 0 0 8px 0;
+  font-size: 1.7rem;
+  color: #111827;
+}
+
+.job-details-company {
+  margin: 0 0 16px 0;
+  color: #6b7280;
+  font-size: 1rem;
+}
+
+.job-details-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 24px;
+  font-size: 0.92rem;
+  color: #4b5563;
+}
+
+.job-details-section {
+  margin-bottom: 24px;
+}
+
+.job-details-section h3 {
+  margin: 0 0 10px 0;
+  font-size: 1rem;
+  color: #111827;
+}
+
+.job-details-section p {
+  margin: 0;
+  color: #4b5563;
+  line-height: 1.7;
+  white-space: pre-line;
+}
+
+.job-details-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 20px;
+}
+
+.details-close-btn {
+  padding: 9px 18px;
+  background: #f3f4f6;
+  color: #374151;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
 }
 
 @media (max-width: 900px) {

@@ -19,8 +19,6 @@
       My Applications
     </span>
   </div>
-
-  <!-- divider -->
   <div class="nav-divider"></div>
 
   <button @click="handleLogout" class="logout-btn">Logout</button>
@@ -62,6 +60,9 @@ export default {
 
 <style scoped>
 .candidate-nav {
+  position: sticky;
+  top: 0;
+  z-index: 200;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -70,7 +71,6 @@ export default {
   border-bottom: 1px solid #e5e7eb;
 }
 
-/* LEFT: BRAND */
 .brand {
   font-size: 24px;
   font-weight: 800;
@@ -78,42 +78,36 @@ export default {
   cursor: pointer;
 }
 
-/* RIGHT SIDE (links + divider + logout) */
 .nav-right {
   display: flex;
   align-items: center;
   gap: 20px;
 }
 
-/* NAV LINKS */
 .nav-links {
   display: flex;
   align-items: center;
   gap: 28px;
 }
 
-/* DEFAULT LINK */
 .nav-link {
   font-size: 16px;
   font-weight: 600;
-  color: #374151; /* darker grey */
+  color: #374151; 
   cursor: pointer;
   position: relative;
   padding-bottom: 6px;
   transition: color 0.2s ease;
 }
 
-/* HOVER */
 .nav-link:hover {
   color: #111827;
 }
 
-/* ACTIVE LINK */
 .nav-link.active {
   color: #1e3a8a;
 }
 
-/* UNDERLINE EFFECT */
 .nav-link.active::after {
   content: '';
   position: absolute;
@@ -125,7 +119,6 @@ export default {
   border-radius: 2px;
 }
 
-/* DIVIDER LINE */
 .nav-divider {
   width: 1px;
   height: 20px;
@@ -148,7 +141,6 @@ export default {
   background: #dc2626;
 }
 
-/* MOBILE */
 @media (max-width: 640px) {
   .candidate-nav {
     flex-direction: column;

@@ -1,237 +1,267 @@
 <template>
   <div class="swipe-page">
+    <header class="screen-header">
+      <div>
+        <h1 class="screen-title">Job: {{ selectedJobTitle }}</h1>
+        <p class="screen-subtitle">Applicants Remaining: {{ pendingCandidates.length }}</p>
+      </div>
 
-    <!-- Top bar -->
-    <nav class="swipe-nav">
-      <div class="swipe-nav__left">
-        <router-link 
-          :to="route.query.jobId ? `/hr/jobs/${route.query.jobId}/candidates` : '/hr/candidates'" 
-          class="exit-btn"
+      <div class="header-actions">
+        <button
+          class="header-btn"
+          @click="undoLast"
+          :disabled="!lastDecision || processing"
+          type="button"
         >
-          <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18"><path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd"/></svg>
-          Exit Screening
+          ← Undo
+        </button>
+        <router-link
+          :to="route.query.jobId ? `/hr/jobs/${route.query.jobId}/candidates` : '/hr/candidates'"
+          class="header-btn header-btn--ghost"
+        >
+          Exit
         </router-link>
       </div>
-      <div class="swipe-nav__center">
-        <span class="logo">⟳ CareerSwipe</span>
-      </div>
-      <div class="swipe-nav__right">
-        <span class="progress-text">{{ reviewedCount }} reviewed · {{ pendingCandidates.length }} remaining</span>
-      </div>
-    </nav>
+    </header>
 
-    <!-- Main area -->
     <main class="swipe-main">
-
-      <!-- Loading -->
       <div v-if="loading" class="center-state">
         <div class="spinner"></div>
-        <p>Loading candidates…</p>
+        <p>Loading candidates...</p>
       </div>
 
-      <!-- All done -->
       <div v-else-if="pendingCandidates.length === 0" class="center-state">
-        <div class="done-circle">🎉</div>
-        <h2>All caught up!</h2>
-        <p>{{ shortlistedCount }} shortlisted · {{ rejectedCount }} rejected · {{ reviewedCount }} total reviewed</p>
-        
-        <router-link 
-          :to="route.query.jobId ? `/hr/jobs/${route.query.jobId}/candidates` : '/hr/candidates'" 
-          class="action-btn action-btn--primary"
+        <div class="done-circle">Done</div>
+        <h2>All candidates reviewed</h2>
+        <p>{{ shortlistedCount }} shortlisted · {{ rejectedCount }} rejected</p>
+        <router-link
+          :to="route.query.jobId ? `/hr/jobs/${route.query.jobId}/candidates` : '/hr/candidates'"
+          class="back-link"
         >
-          ← {{ route.query.jobId ? 'Back to Job Candidates' : 'Back to All Candidates' }}
+          Back to candidates
         </router-link>
       </div>
 
-      <!-- Swipe card -->
-      <div v-else class="swipe-content">
-
-        <!-- Job selector -->
-        <div class="job-selector">
-          <label class="job-selector__label">Screening job:</label>
-          
-          <select 
-            v-if="!isSingleJobMode" 
-            v-model="selectedJobId" 
-            class="job-selector__select"
-          >
+      <section v-else class="swipe-content">
+        <div class="job-selector" v-if="!isSingleJobMode">
+          <label class="job-selector__label">Screening job</label>
+          <select v-model="selectedJobId" class="job-selector__select">
             <option value="all">All Jobs ({{ allPending.length }} pending)</option>
             <option v-for="(title, jobId) in jobTitles" :key="jobId" :value="jobId">
               {{ title }} ({{ pendingByJob[jobId] || 0 }} pending)
             </option>
           </select>
-
-          <div v-else class="job-selector__locked">
-            {{ jobTitles[selectedJobId] || 'Loading...' }} 
-            <span class="locked-count">({{ pendingCandidates.length }} pending)</span>
-          </div>
         </div>
 
-        <!-- Progress bar -->
-        <div class="progress-bar-wrap">
-          <div class="progress-bar-track">
-            <div class="progress-bar-fill" :style="{ width: progressPercent + '%' }"></div>
-          </div>
-          <span class="progress-bar-label">{{ reviewedCount }} / {{ totalCandidates }} reviewed</span>
-        </div>
+        <p class="swipe-stats-line">
+          {{ pendingCandidates.length }} remaining · {{ reviewedCount }} screened · {{ shortlistedCount }} shortlisted
+        </p>
 
-        <!-- Card -->
         <div class="card-area" v-if="currentCandidate">
-          <div class="candidate-card" :class="{ 'card--exit-left': exitLeft, 'card--exit-right': exitRight }">
-
-            <!-- Card header -->
-            <div class="card__header">
-              <div class="card__avatar">{{ initials(currentCandidate.candidateName) }}</div>
-              <div class="card__identity">
-                <h2 class="card__name">{{ currentCandidate.candidateName || 'Unknown Applicant' }}</h2>
-                <p class="card__email">{{ currentCandidate.candidateEmail }}</p>
-                <p class="card__job">Applying for: <strong>{{ jobTitles[currentCandidate.jobId] || 'Unknown Role' }}</strong></p>
+          <article class="candidate-card" :class="{ 'card--exit-left': exitLeft, 'card--exit-right': exitRight }">
+            <div class="card-top-row">
+              <div>
+                <h2 class="candidate-name">{{ aiSummary.candidateName }}</h2>
+                <p class="candidate-meta">{{ aiSummary.location }} · {{ yearsExperienceLabel }}</p>
               </div>
-              <div class="card__date">
-                <span class="date-label">Applied</span>
-                <span class="date-value">{{ formatDate(currentCandidate.createdAt) }}</span>
-              </div>
+              <div class="match-pill" :class="matchPillClass">{{ matchLabel }}</div>
             </div>
 
-            <div class="card__divider"></div>
-
-            <!-- Resume section -->
-            <div class="card__resume-section">
-              <div class="resume-header">
-                <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd"/></svg>
-                <span>Resume</span>
+            <section class="card-section" v-if="aiSummary.primarySkills.length">
+              <p class="section-label">TOP SKILLS</p>
+              <div class="skills-wrap">
+                <span v-for="skill in aiSummary.primarySkills" :key="skill" class="skill-pill">{{ skill }}</span>
               </div>
+            </section>
 
-              <div v-if="currentCandidate.resumeUrl" class="resume-preview">
-                <iframe
-                  :src="currentCandidate.resumeUrl"
-                  class="resume-iframe"
-                  title="Candidate Resume"
-                ></iframe>
-                <a :href="currentCandidate.resumeUrl" target="_blank" class="resume-open-link">
-                  Open in new tab ↗
-                </a>
-              </div>
+            <section class="card-section">
+              <p class="section-label">EXPERIENCE</p>
+              <p class="section-content">{{ aiSummary.experienceSummary }}</p>
+            </section>
 
-              <div v-else class="resume-unavailable">
-                <svg viewBox="0 0 20 20" fill="currentColor" width="32" height="32"><path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd"/></svg>
-                <p>No resume uploaded</p>
-              </div>
-            </div>
+            <section class="card-section">
+              <p class="section-label">EDUCATION</p>
+              <p class="section-content">{{ aiSummary.educationSummary }}</p>
+            </section>
 
-          </div>
+            <p v-if="aiSummary.matchReason !== 'Not found'" class="match-reason">
+              {{ aiSummary.matchReason }}
+            </p>
+
+            <a
+              v-if="currentCandidate.resumeUrl"
+              :href="currentCandidate.resumeUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="resume-link"
+            >
+              View Full Resume →
+            </a>
+          </article>
         </div>
 
-        <!-- Decision buttons -->
         <div class="decision-bar" v-if="currentCandidate">
-          <button
-            class="decision-btn decision-btn--reject"
-            @click="decide('Rejected')"
-            :disabled="processing"
-          >
-            <svg viewBox="0 0 20 20" fill="currentColor" width="20" height="20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+          <button class="decision-btn decision-btn--reject" @click="decide('Rejected')" :disabled="processing">
             Reject
           </button>
-
-          <button
-            class="decision-btn decision-btn--shortlist"
-            @click="decide('Shortlisted')"
-            :disabled="processing"
-          >
-            <svg viewBox="0 0 20 20" fill="currentColor" width="20" height="20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+          <button class="decision-btn decision-btn--shortlist" @click="decide('Shortlisted')" :disabled="processing">
             Shortlist
           </button>
         </div>
 
-        <!-- Keyboard hint -->
-        <p class="keyboard-hint">← Reject &nbsp;|&nbsp; → Shortlist &nbsp;|&nbsp; Space Skip &nbsp;|&nbsp; {{ isMac ? '⌘Z' : 'Ctrl+Z' }} Undo</p>
-
-      </div>
+        <p class="keyboard-hint">← Reject | → Shortlist | Space Skip | {{ isMac ? 'Cmd+Z' : 'Ctrl+Z' }} Undo</p>
+      </section>
     </main>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { auth, db } from '@/firebaseConfig'
 import { onAuthStateChanged } from 'firebase/auth'
 import {
-  collection, query, where, getDocs,
-  doc, updateDoc, getDoc
+  collection,
+  query,
+  where,
+  getDocs,
+  doc,
+  updateDoc,
+  orderBy,
+  limit
 } from 'firebase/firestore'
 
 const route = useRoute()
 const router = useRouter()
 const isMac = navigator.platform.toUpperCase().includes('MAC')
 
-// ── State ──────────────────────────────────────────────────────────────────
-const allCandidates  = ref([])
-const jobTitles      = ref({})
-const loading        = ref(true)
-const processing     = ref(false)
-const selectedJobId  = ref(route.query.jobId || 'all')
-const lastDecision   = ref(null) // { id, previousStatus }
-const exitLeft       = ref(false)
-const exitRight      = ref(false)
+const allCandidates = ref([])
+const jobTitles = ref({})
+const loading = ref(true)
+const processing = ref(false)
+const selectedJobId = ref(route.query.jobId || 'all')
+const lastDecision = ref(null)
+const exitLeft = ref(false)
+const exitRight = ref(false)
+const extractionByApplication = ref({})
 
-// ── Computed ───────────────────────────────────────────────────────────────
 const isSingleJobMode = computed(() => !!route.query.jobId)
 
 const allPending = computed(() =>
-  allCandidates.value.filter(c => c.status === 'Pending')
+  allCandidates.value.filter((c) => c.status === 'Pending')
 )
 
 const pendingCandidates = computed(() => {
   if (selectedJobId.value === 'all') return allPending.value
-  return allPending.value.filter(c => c.jobId === selectedJobId.value)
+  return allPending.value.filter((c) => c.jobId === selectedJobId.value)
 })
 
 const currentCandidate = computed(() => pendingCandidates.value[0] || null)
 
 const pendingByJob = computed(() => {
   const map = {}
-  allPending.value.forEach(c => {
+  allPending.value.forEach((c) => {
     map[c.jobId] = (map[c.jobId] || 0) + 1
   })
   return map
 })
 
-const reviewedCount   = computed(() => allCandidates.value.filter(c => c.status !== 'Pending').length)
-const shortlistedCount = computed(() => allCandidates.value.filter(c => c.status === 'Shortlisted').length)
-const rejectedCount   = computed(() => allCandidates.value.filter(c => c.status === 'Rejected').length)
-const totalCandidates = computed(() => allCandidates.value.length)
-const progressPercent = computed(() =>
-  totalCandidates.value > 0
-    ? Math.round((reviewedCount.value / totalCandidates.value) * 100)
-    : 0
-)
+const reviewedCount = computed(() => allCandidates.value.filter((c) => c.status !== 'Pending').length)
+const shortlistedCount = computed(() => allCandidates.value.filter((c) => c.status === 'Shortlisted').length)
+const rejectedCount = computed(() => allCandidates.value.filter((c) => c.status === 'Rejected').length)
 
-// ── Lifecycle ──────────────────────────────────────────────────────────────
+const selectedJobTitle = computed(() => {
+  if (selectedJobId.value === 'all') return 'All Open Roles'
+  return jobTitles.value[selectedJobId.value] || 'Role Screening'
+})
+
+const aiSummary = computed(() => {
+  const fallback = {
+    candidateName: currentCandidate.value?.candidateName || 'Unknown Candidate',
+    location: 'Location unavailable',
+    totalYearsExperience: null,
+    primarySkills: [],
+    experienceSummary: 'AI extraction is still in progress. Resume details will appear shortly.',
+    educationSummary: 'Education details unavailable.',
+    matchScore: currentCandidate.value?.matchScore ?? null,
+    matchReason: 'Not found'
+  }
+
+  if (!currentCandidate.value) return fallback
+  const extracted = extractionByApplication.value[currentCandidate.value.id]
+  if (!extracted) return fallback
+
+  return {
+    candidateName: extracted.candidateName || fallback.candidateName,
+    location: extracted.location || fallback.location,
+    totalYearsExperience:
+      typeof extracted.totalYearsExperience === 'number'
+        ? extracted.totalYearsExperience
+        : fallback.totalYearsExperience,
+    primarySkills: Array.isArray(extracted.primarySkills) ? extracted.primarySkills.slice(0, 6) : [],
+    experienceSummary: extracted.experienceSummary || fallback.experienceSummary,
+    educationSummary: extracted.educationSummary || fallback.educationSummary,
+    matchScore:
+      Number.isInteger(extracted.matchScore) || typeof extracted.matchScore === 'number'
+        ? Math.max(0, Math.min(100, Math.round(extracted.matchScore)))
+        : fallback.matchScore,
+    matchReason: extracted.matchReason || fallback.matchReason
+  }
+})
+
+const matchLabel = computed(() => {
+  if (typeof aiSummary.value.matchScore !== 'number') return 'Pending Match'
+  return `${aiSummary.value.matchScore}% Match`
+})
+
+const yearsExperienceLabel = computed(() => {
+  if (typeof aiSummary.value.totalYearsExperience !== 'number') return 'experience not available'
+  const years = aiSummary.value.totalYearsExperience
+  return `${years} years experience`
+})
+
+const matchPillClass = computed(() => {
+  if (typeof aiSummary.value.matchScore !== 'number') return 'match-pill--pending'
+  if (aiSummary.value.matchScore >= 70) return 'match-pill--strong'
+  if (aiSummary.value.matchScore >= 40) return 'match-pill--medium'
+  return 'match-pill--low'
+})
+
+watch(currentCandidate, (candidate) => {
+  if (candidate && pendingCandidates.value.length > 1) {
+    const nextIdx = pendingCandidates.value.indexOf(candidate) + 1
+    if (nextIdx < pendingCandidates.value.length) {
+      const nextCandidate = pendingCandidates.value[nextIdx]
+      prefetchExtraction(nextCandidate.id)
+    }
+  }
+}, { immediate: false })
+
 onMounted(() => {
   onAuthStateChanged(auth, async (user) => {
-    if (!user) { router.push('/login'); return }
+    if (!user) {
+      router.push('/login')
+      return
+    }
 
-    // Fetch all jobs by this HR user
     const jobsSnap = await getDocs(
       query(collection(db, 'jobs'), where('hrId', '==', user.uid))
     )
-    const jobIds = []
-    jobsSnap.forEach(d => {
-      jobIds.push(d.id)
+    jobsSnap.forEach((d) => {
       jobTitles.value[d.id] = d.data().title
     })
 
-    // Directly query applications by hrId
     const appSnap = await getDocs(
       query(collection(db, 'applications'), where('hrId', '==', user.uid))
     )
-    allCandidates.value = appSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+    allCandidates.value = appSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
+
+    // Batch-load all extractions upfront (parallel queries)
+    await batchLoadExtractions(allCandidates.value.map(c => c.id))
 
     loading.value = false
   })
 
-  // Keyboard shortcuts
   window.addEventListener('keydown', handleKeydown)
 })
 
@@ -239,15 +269,146 @@ onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown)
 })
 
-// ── Methods ────────────────────────────────────────────────────────────────
 function handleKeydown(e) {
   if (!currentCandidate.value || processing.value) return
-  if (e.key === 'ArrowLeft')  decide('Rejected')
+  if (e.key === 'ArrowLeft') decide('Rejected')
   if (e.key === 'ArrowRight') decide('Shortlisted')
   if ((e.key === 'z' || e.key === 'Z') && (isMac ? e.metaKey : e.ctrlKey)) undoLast()
   if (e.key === ' ') {
-    e.preventDefault() // prevents page from scrolling down
+    e.preventDefault()
     skipCandidate()
+  }
+}
+
+async function batchLoadExtractions(applicationIds) {
+  if (!applicationIds.length) return
+  try {
+    console.log(`[Batch] Loading extractions for ${applicationIds.length} candidates...`, applicationIds)
+    // Load extractions in parallel for all candidates
+    await Promise.all(
+      applicationIds.map(async (appId) => {
+        if (extractionByApplication.value[appId]) {
+          console.log(`[Batch] ${appId} already loaded, skipping`)
+          return
+        }
+        try {
+          // Try with orderBy first
+          console.log(`[Batch] Querying ${appId}...`)
+          let extractionSnap = await getDocs(
+            query(
+              collection(db, 'applications', appId, 'resumeExtraction'),
+              orderBy('extractedAt', 'desc'),
+              limit(1)
+            )
+          )
+          
+          console.log(`[Batch] Query result for ${appId}: ${extractionSnap.empty ? 'EMPTY' : extractionSnap.docs.length + ' docs'}`)
+          
+          // Fallback: if orderBy fails, fetch all and pick latest
+          if (extractionSnap.empty) {
+            console.log(`[Batch] Fallback: fetching all docs for ${appId}...`)
+            extractionSnap = await getDocs(
+              collection(db, 'applications', appId, 'resumeExtraction')
+            )
+            console.log(`[Batch] Fallback result: ${extractionSnap.docs.length} docs`)
+            
+            if (!extractionSnap.empty) {
+              const docs = extractionSnap.docs.sort((a, b) => {
+                const aTime = a.data().extractedAt?.toMillis?.() ?? 0
+                const bTime = b.data().extractedAt?.toMillis?.() ?? 0
+                return bTime - aTime
+              })
+              extractionByApplication.value[appId] = docs[0].data()
+              console.log(`[Batch] ✓ Loaded ${appId}`, docs[0].data())
+            }
+          } else {
+            const data = extractionSnap.docs[0].data()
+            extractionByApplication.value[appId] = data
+            console.log(`[Batch] ✓ Loaded ${appId}`, data)
+          }
+        } catch (e) {
+          console.warn(`[Batch] Query error for ${appId}:`, e.code, e.message)
+          // Try simple collection fetch as last resort
+          try {
+            const snap = await getDocs(collection(db, 'applications', appId, 'resumeExtraction'))
+            console.log(`[Batch] Direct fetch got ${snap.docs.length} docs for ${appId}`)
+            if (!snap.empty) {
+              extractionByApplication.value[appId] = snap.docs[0].data()
+              console.log(`[Batch] ✓ Loaded ${appId} (fallback)`, snap.docs[0].data())
+            }
+          } catch (fallbackError) {
+            console.error(`[Batch] All queries failed for ${appId}:`, fallbackError.code, fallbackError.message)
+          }
+        }
+      })
+    )
+    console.log(`[Batch] Complete. Total loaded: ${Object.keys(extractionByApplication.value).length}`, extractionByApplication.value)
+  } catch (error) {
+    console.error('Batch extraction load error:', error)
+  }
+}
+
+async function prefetchExtraction(applicationId) {
+  if (!applicationId || extractionByApplication.value[applicationId]) return
+  try {
+    const extractionSnap = await getDocs(
+      query(
+        collection(db, 'applications', applicationId, 'resumeExtraction'),
+        orderBy('extractedAt', 'desc'),
+        limit(1)
+      )
+    )
+    if (!extractionSnap.empty) {
+      extractionByApplication.value[applicationId] = extractionSnap.docs[0].data()
+      console.log(`[Prefetch] Loaded ${applicationId}`)
+    }
+  } catch (error) {
+    // Fallback: fetch all and pick latest
+    try {
+      const snap = await getDocs(collection(db, 'applications', applicationId, 'resumeExtraction'))
+      if (!snap.empty) {
+        const docs = snap.docs.sort((a, b) => {
+          const aTime = a.data().extractedAt?.toMillis?.() ?? 0
+          const bTime = b.data().extractedAt?.toMillis?.() ?? 0
+          return bTime - aTime
+        })
+        extractionByApplication.value[applicationId] = docs[0].data()
+        console.log(`[Prefetch] Loaded ${applicationId} (fallback)`)
+      }
+    } catch (fallbackError) {
+      console.warn(`[Prefetch] Failed for ${applicationId}:`, fallbackError.message)
+    }
+  }
+}
+
+async function loadLatestExtraction(applicationId) {
+  if (!applicationId || extractionByApplication.value[applicationId]) return
+  try {
+    const extractionSnap = await getDocs(
+      query(
+        collection(db, 'applications', applicationId, 'resumeExtraction'),
+        orderBy('extractedAt', 'desc'),
+        limit(1)
+      )
+    )
+    if (!extractionSnap.empty) {
+      extractionByApplication.value[applicationId] = extractionSnap.docs[0].data()
+    }
+  } catch (error) {
+    // Fallback: fetch all and pick latest
+    try {
+      const snap = await getDocs(collection(db, 'applications', applicationId, 'resumeExtraction'))
+      if (!snap.empty) {
+        const docs = snap.docs.sort((a, b) => {
+          const aTime = a.data().extractedAt?.toMillis?.() ?? 0
+          const bTime = b.data().extractedAt?.toMillis?.() ?? 0
+          return bTime - aTime
+        })
+        extractionByApplication.value[applicationId] = docs[0].data()
+      }
+    } catch {
+      console.warn(`[Load] Could not load extraction for ${applicationId}`)
+    }
   }
 }
 
@@ -258,17 +419,16 @@ async function decide(newStatus) {
   const candidate = currentCandidate.value
   const previousStatus = candidate.status
 
-  // Animate card exit
   if (newStatus === 'Rejected') exitLeft.value = true
   else exitRight.value = true
 
-  await new Promise(r => setTimeout(r, 280))
+  await new Promise((r) => setTimeout(r, 260))
   exitLeft.value = false
   exitRight.value = false
 
   try {
     await updateDoc(doc(db, 'applications', candidate.id), { status: newStatus })
-    const idx = allCandidates.value.findIndex(c => c.id === candidate.id)
+    const idx = allCandidates.value.findIndex((c) => c.id === candidate.id)
     if (idx !== -1) allCandidates.value[idx].status = newStatus
     lastDecision.value = { id: candidate.id, previousStatus }
   } catch (e) {
@@ -286,10 +446,10 @@ async function undoLast() {
     await updateDoc(doc(db, 'applications', lastDecision.value.id), {
       status: lastDecision.value.previousStatus
     })
-    const idx = allCandidates.value.findIndex(c => c.id === lastDecision.value.id)
+    const idx = allCandidates.value.findIndex((c) => c.id === lastDecision.value.id)
     if (idx !== -1) allCandidates.value[idx].status = lastDecision.value.previousStatus
     lastDecision.value = null
-  } catch (e) {
+  } catch {
     alert('Failed to undo.')
   } finally {
     processing.value = false
@@ -298,30 +458,11 @@ async function undoLast() {
 
 function skipCandidate() {
   if (!currentCandidate.value || processing.value) return
-  // Move current candidate to the end of the list so they appear again later
-  const idx = allCandidates.value.findIndex(c => c.id === currentCandidate.value.id)
+  const idx = allCandidates.value.findIndex((c) => c.id === currentCandidate.value.id)
   if (idx !== -1) {
     const candidate = allCandidates.value.splice(idx, 1)[0]
     allCandidates.value.push(candidate)
   }
-}
-
-function filterCandidates() {
-  // reactive — computed handles filtering
-}
-
-function initials(name) {
-  if (!name) return '?'
-  return name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
-}
-
-function formatDate(ts) {
-  if (!ts) return 'N/A'
-  try {
-    return new Date(ts.toDate()).toLocaleDateString('en-SG', {
-      day: 'numeric', month: 'short', year: 'numeric'
-    })
-  } catch { return 'N/A' }
 }
 </script>
 
@@ -330,324 +471,356 @@ function formatDate(ts) {
 
 .swipe-page {
   min-height: 100vh;
-  background: #F0F2F8;
+  background: #f2f4f8;
   font-family: 'DM Sans', sans-serif;
-  display: flex;
-  flex-direction: column;
-}
-.job-selector__locked {
-  flex: 1;
-  font-size: 15px;
-  font-weight: 700;
-  color: #1A2340;
-}
-.locked-count {
-  font-size: 13px;
-  font-weight: 500;
-  color: #6B7A99;
-  margin-left: 6px;
-}
-
-/* ── Nav ── */
-.swipe-nav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 32px;
-  background: #fff;
-  border-bottom: 1px solid #E2E8F6;
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-.exit-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  font-weight: 600;
-  color: #6B7A99;
-  text-decoration: none;
-  padding: 8px 14px;
-  border-radius: 8px;
-  border: 1.5px solid #E2E8F6;
-  transition: all .15s;
-}
-.exit-btn:hover { color: #1E6FEB; border-color: #1E6FEB; background: #F0F6FF; }
-.logo { font-size: 16px; font-weight: 700; color: #0D1B3E; }
-.progress-text { font-size: 13px; color: #6B7A99; font-weight: 500; }
-
-/* ── Main ── */
-.swipe-main {
-  flex: 1;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
+  color: #1b223a;
   padding: 32px 24px 40px;
 }
 
-.center-state {
+.screen-header {
+  max-width: 980px;
+  margin: 0 auto 24px;
   display: flex;
-  flex-direction: column;
-  align-items: center;
+  justify-content: space-between;
   gap: 16px;
-  text-align: center;
-  margin-top: 80px;
-  color: #6B7A99;
-}
-.done-circle {
-  width: 80px; height: 80px;
-  background: #fff;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  font-size: 36px;
-  box-shadow: 0 4px 20px rgba(13,27,62,.1);
-}
-.center-state h2 { font-size: 22px; font-weight: 700; color: #1A2340; margin: 0; }
-.center-state p { font-size: 14px; margin: 0; }
-.spinner { width: 40px; height: 40px; border: 3px solid #E2E8F6; border-top-color: #1E6FEB; border-radius: 50%; animation: spin .7s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* ── Swipe content ── */
-.swipe-content {
-  width: 100%;
-  max-width: 680px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 20px;
+  align-items: flex-start;
 }
 
-/* ── Job selector ── */
-.job-selector {
+.screen-title {
+  margin: 0;
+  font-size: 38px;
+  line-height: 1.08;
+}
+
+.screen-subtitle {
+  margin: 8px 0 0;
+  font-size: 17px;
+  color: #6d7383;
+}
+
+.header-actions {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  background: #fff;
-  border: 1.5px solid #E2E8F6;
+  gap: 10px;
+}
+
+.header-btn {
+  border: 1px solid #d6dbe8;
   border-radius: 10px;
   padding: 10px 16px;
-  width: 100%;
+  background: #fff;
+  color: #27304b;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
 }
-.job-selector__label { font-size: 13px; font-weight: 600; color: #6B7A99; white-space: nowrap; }
+
+.header-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.header-btn--ghost {
+  background: transparent;
+}
+
+.swipe-main {
+  max-width: 980px;
+  margin: 0 auto;
+}
+
+.center-state {
+  min-height: 55vh;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  gap: 10px;
+  color: #6d7383;
+}
+
+.center-state h2 {
+  margin: 8px 0;
+}
+
+.spinner {
+  width: 38px;
+  height: 38px;
+  border: 3px solid #dbe2f2;
+  border-top-color: #213f95;
+  border-radius: 999px;
+  animation: spin 0.7s linear infinite;
+}
+
+.done-circle {
+  width: 84px;
+  height: 84px;
+  border-radius: 999px;
+  background: #e7ecfb;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  color: #1f377d;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.back-link {
+  color: #1f377d;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.swipe-content {
+  max-width: 760px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.job-selector {
+  background: #fff;
+  border: 1px solid #d9deeb;
+  border-radius: 12px;
+  padding: 10px 14px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.job-selector__label {
+  font-size: 13px;
+  color: #60677b;
+  font-weight: 600;
+}
+
 .job-selector__select {
-  flex: 1;
   border: none;
   background: transparent;
   font-size: 14px;
-  font-weight: 600;
-  color: #1A2340;
-  outline: none;
-  font-family: inherit;
-  cursor: pointer;
-}
-
-/* ── Progress bar ── */
-.progress-bar-wrap {
+  color: #1f2640;
   width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  font-family: inherit;
 }
-.progress-bar-track {
-  flex: 1;
-  height: 6px;
-  background: #E2E8F6;
-  border-radius: 99px;
-  overflow: hidden;
-}
-.progress-bar-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #1E6FEB, #00C2A8);
-  border-radius: 99px;
-  transition: width .4s ease;
-}
-.progress-bar-label { font-size: 12px; color: #6B7A99; white-space: nowrap; }
 
-/* ── Card ── */
-.card-area { width: 100%; perspective: 1000px; }
+.swipe-stats-line {
+  text-align: center;
+  margin: 0;
+  color: #7a8092;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+.card-area {
+  perspective: 1200px;
+}
 
 .candidate-card {
   background: #fff;
-  border-radius: 20px;
-  box-shadow: 0 8px 40px rgba(13,27,62,.12);
-  overflow: hidden;
-  transition: transform .28s cubic-bezier(.4,0,.2,1), opacity .28s ease;
+  border: 1px solid #e2e6f0;
+  border-radius: 18px;
+  box-shadow: 0 8px 30px rgba(31, 40, 70, 0.08);
+  padding: 28px 30px;
+  transition: transform 0.28s ease, opacity 0.28s ease;
 }
 
 .card--exit-left {
-  transform: translateX(-120%) rotate(-8deg);
+  transform: translateX(-120%) rotate(-7deg);
   opacity: 0;
 }
+
 .card--exit-right {
-  transform: translateX(120%) rotate(8deg);
+  transform: translateX(120%) rotate(7deg);
   opacity: 0;
 }
 
-/* Card header */
-.card__header {
+.card-top-row {
   display: flex;
+  justify-content: space-between;
   align-items: flex-start;
-  gap: 16px;
-  padding: 28px 28px 20px;
+  gap: 18px;
 }
-.card__avatar {
-  width: 56px; height: 56px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #1E6FEB, #00C2A8);
-  color: #fff;
+
+.candidate-name {
+  margin: 0;
+  font-size: 40px;
+  line-height: 1.05;
+}
+
+.candidate-meta {
+  margin: 8px 0 0;
+  color: #5f677c;
+  font-size: 17px;
+}
+
+.match-pill {
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 15px;
   font-weight: 700;
-  font-size: 18px;
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
+  white-space: nowrap;
 }
-.card__identity { flex: 1; min-width: 0; }
-.card__name { font-size: 20px; font-weight: 700; color: #1A2340; margin: 0 0 4px; }
-.card__email { font-size: 13px; color: #6B7A99; margin: 0 0 4px; }
-.card__job { font-size: 13px; color: #6B7A99; margin: 0; }
-.card__job strong { color: #1E6FEB; }
-.card__date { text-align: right; flex-shrink: 0; }
-.date-label { display: block; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .8px; color: #6B7A99; margin-bottom: 2px; }
-.date-value { font-size: 13px; font-weight: 600; color: #1A2340; }
 
-.card__divider { height: 1px; background: #F0F4FF; margin: 0 28px; }
+.match-pill--strong {
+  background: #dff7e8;
+  color: #1d8450;
+}
 
-/* Resume section */
-.card__resume-section { padding: 20px 28px 28px; }
-.resume-header {
+.match-pill--medium {
+  background: #fff4d7;
+  color: #9a6a07;
+}
+
+.match-pill--low {
+  background: #ffe2e2;
+  color: #b42323;
+}
+
+.match-pill--pending {
+  background: #eceff5;
+  color: #5b6377;
+}
+
+.card-section {
+  margin-top: 22px;
+}
+
+.section-label {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: #7f8698;
+  letter-spacing: 0.8px;
+  font-weight: 700;
+}
+
+.skills-wrap {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: .8px;
-  color: #6B7A99;
-  margin-bottom: 14px;
+  flex-wrap: wrap;
+  gap: 8px;
 }
-.resume-iframe {
-  width: 100%;
-  height: 400px;
-  border: 1.5px solid #E2E8F6;
-  border-radius: 10px;
-  display: block;
-}
-.resume-open-link {
-  display: inline-block;
-  margin-top: 10px;
+
+.skill-pill {
+  background: #f0f2f6;
+  color: #2f3550;
+  border-radius: 999px;
+  padding: 8px 12px;
   font-size: 13px;
   font-weight: 600;
-  color: #1E6FEB;
-  text-decoration: none;
 }
-.resume-open-link:hover { text-decoration: underline; }
-.resume-unavailable {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 40px;
-  background: #F8FAFC;
-  border: 1.5px dashed #E2E8F6;
-  border-radius: 10px;
-  color: #6B7A99;
+
+.section-content {
+  margin: 0;
+  line-height: 1.6;
+  color: #2b3450;
+  font-size: 16px;
+}
+
+.match-reason {
+  margin: 18px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid #e7ebf4;
+  color: #5f677c;
   font-size: 14px;
 }
 
-/* ── Decision bar ── */
+.resume-link {
+  display: inline-block;
+  margin-top: 18px;
+  color: #2243a6;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 17px;
+}
+
 .decision-bar {
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 12px;
-  width: 100%;
 }
 
 .decision-btn {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 15px 24px;
   border-radius: 12px;
-  font-size: 16px;
-  font-weight: 700;
   border: 2px solid transparent;
-  cursor: pointer;
-  transition: all .15s;
+  padding: 15px 16px;
+  font-size: 22px;
+  font-weight: 700;
   font-family: inherit;
+  cursor: pointer;
 }
 
 .decision-btn--reject {
   background: #fff;
-  color: #EF4444;
-  border-color: #FCA5A5;
-}
-.decision-btn--reject:hover:not(:disabled) {
-  background: #FEF2F2;
-  border-color: #EF4444;
-  box-shadow: 0 4px 16px rgba(239,68,68,.2);
+  border-color: #ed7f7f;
+  color: #c13535;
 }
 
 .decision-btn--shortlist {
-  background: #1E3A8A;
+  background: #203b8d;
   color: #fff;
-  border-color: #1E3A8A;
-}
-.decision-btn--shortlist:hover:not(:disabled) {
-  background: #172d6c;
-  box-shadow: 0 4px 16px rgba(30,58,138,.3);
 }
 
-.decision-btn:disabled { opacity: .5; cursor: not-allowed; }
-
-.undo-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 12px 16px;
-  background: #fff;
-  border: 1.5px solid #E2E8F6;
-  border-radius: 10px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #6B7A99;
-  cursor: pointer;
-  transition: all .15s;
-  white-space: nowrap;
-  font-family: inherit;
+.decision-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
-.undo-btn:hover:not(:disabled) { border-color: #1E6FEB; color: #1E6FEB; }
-.undo-btn:disabled { opacity: .4; cursor: not-allowed; }
 
-/* ── Keyboard hint ── */
 .keyboard-hint {
-  font-size: 12px;
-  color: #9CA3AF;
+  margin: 0;
   text-align: center;
+  font-size: 12px;
+  color: #8a90a2;
 }
-
-.action-btn--primary {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 24px;
-  background: #1E6FEB;
-  color: #fff;
-  border-radius: 10px;
-  font-size: 14px;
-  font-weight: 600;
-  text-decoration: none;
-  transition: all .15s;
-}
-.action-btn--primary:hover { background: #1460d4; }
 
 @media (max-width: 768px) {
-  .swipe-main { padding: 20px 16px; }
-  .swipe-nav { padding: 12px 16px; }
-  .progress-text { display: none; }
-  .resume-iframe { height: 280px; }
+  .swipe-page {
+    padding: 18px 14px 28px;
+  }
+
+  .screen-header {
+    flex-direction: column;
+    margin-bottom: 16px;
+  }
+
+  .screen-title {
+    font-size: 30px;
+  }
+
+  .screen-subtitle {
+    font-size: 15px;
+  }
+
+  .header-actions {
+    width: 100%;
+  }
+
+  .header-btn,
+  .header-btn--ghost {
+    flex: 1;
+    text-align: center;
+  }
+
+  .candidate-card {
+    padding: 20px;
+  }
+
+  .candidate-name {
+    font-size: 28px;
+  }
+
+  .candidate-meta {
+    font-size: 14px;
+  }
+
+  .match-pill {
+    font-size: 13px;
+    padding: 7px 10px;
+  }
+
+  .decision-btn {
+    font-size: 18px;
+  }
 }
 </style>

@@ -1,39 +1,11 @@
-// ============================================================
-// Firebase Cloud Function — Automatic Resume Parser
-// Region: asia-southeast1
-//
-// WHAT IT DOES:
-//   Listens for new documents in the Firestore "applications" collection.
-//   When a candidate submits a job application (with a resume PDF), this
-//   function automatically downloads and parses the PDF, then stores the
-//   extracted text in a "parseResults" subcollection.
-// ============================================================
-
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
-const PDFParser = require("pdf2json");
 const https = require("https");
-const { onDocumentUpdated } = require('firebase-functions/v2/firestore')
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { onDocumentUpdated } = require('firebase-functions/v2/firestore');
 
 admin.initializeApp();
-
 const db = admin.firestore();
-
-// Parses a PDF from a raw buffer and returns the extracted text + page count.
-// Uses pdf2json instead of pdf-parse due to a known import bug in Cloud Functions.
-function parsePdfBuffer(buffer) {
-  return new Promise((resolve, reject) => {
-    const pdfParser = new PDFParser(null, 1);
-    pdfParser.on("pdfParser_dataError", (err) => reject(err.parserError));
-    pdfParser.on("pdfParser_dataReady", (pdfData) => {
-      resolve({
-        text: pdfParser.getRawTextContent(),
-        numpages: pdfData.Pages ? pdfData.Pages.length : 0,
-      });
-    });
-    pdfParser.parseBuffer(buffer);
-  });
-}
 
 // Downloads a PDF from a Firebase Storage URL and returns it as a Buffer.
 function downloadPdfFromUrl(url) {
@@ -53,7 +25,6 @@ function downloadPdfFromUrl(url) {
   });
 }
 
-// Firestore trigger — fires automatically when a new application is created.
 exports.onApplicationCreated = functions
   .region("asia-southeast1")
   .firestore.document("applications/{applicationId}")
@@ -68,103 +39,158 @@ exports.onApplicationCreated = functions
         return;
       }
 
-      console.log(`[TRIGGER] Parsing resume for application: ${applicationId}`);
+      console.log(`[TRIGGER] Processing resume for application: ${applicationId}`);
 
-      // Step 1: Download the PDF from Firebase Storage
+      // Step 1: Download PDF and convert to base64
       const pdfBuffer = await downloadPdfFromUrl(resumeUrl);
+      const base64Pdf = pdfBuffer.toString("base64");
+      console.log(`[TRIGGER] PDF downloaded, size: ${pdfBuffer.length} bytes`);
 
-      // Step 2: Extract text from the PDF
-      const pdfData = await parsePdfBuffer(pdfBuffer);
+      // Step 2: Fetch job description from Firestore
+      const jobId = applicationData.jobId;
+      let jobDescription = "Not provided";
+      if (jobId) {
+        const jobDoc = await db.collection("jobs").doc(jobId).get();
+        if (jobDoc.exists) {
+          jobDescription = jobDoc.data().description || "Not provided";
+          console.log(`[TRIGGER] Job description fetched for jobId: ${jobId}`);
+        }
+      }
 
-      console.log(`[TRIGGER] Parsed: ${pdfData.numpages} pages, ${pdfData.text.length} characters`);
+      // Step 3: Send PDF natively to Gemini
+      const genAI = new GoogleGenerativeAI(functions.config().gemini.key);
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-      // Step 3: Save the extracted text to the parseResults subcollection
-      const resultDoc = await db
+      const prompt = `You are an expert resume parser and job fit assessor. Extract information from the attached resume PDF and evaluate it against the job description below. Return a single JSON object.
+
+JOB DESCRIPTION:
+${jobDescription}
+
+TODAY'S DATE: ${new Date().toISOString().split('T')[0]}
+
+FIELDS TO EXTRACT:
+- candidateName: Full name of the candidate.
+- location: Current location. City and Country only.
+- totalYearsExperience: Total years of work experience as a number (decimal ok, e.g. 2.5). Include military/national service. Exclude education periods. For current roles, calculate duration up to today.
+- primarySkills: Array of top 5 recruiter-friendly skills. Prefer technologies, tools, domain expertise, programming languages. No generic tasks like "communication" or "reporting".
+- experienceSummary: Max 3 sentences. Summarise the candidate's most relevant work experience in plain English. Mention current/recent role, key achievements, and relevant background.
+- educationSummary: Max 2 sentences. State the highest qualification and institution. Example: "Bachelor of Science in Marketing, UC Berkeley."
+- matchScore: Integer 0-100. How well does this resume match the job description? Consider relevant skills, experience, industry background, and qualifications. Be realistic. 70+ = strong, 40-69 = partial, below 40 = weak.
+- matchReason: 1-2 sentences explaining the match score. Mention key strengths and any gaps.
+
+If a field cannot be determined, use:
+- null for numbers
+- "Not found" for strings
+- [] for arrays
+
+Return ONLY a valid JSON object. No markdown, no backticks, no explanation.`;
+
+      const result = await model.generateContent([
+        {
+          inlineData: {
+            mimeType: "application/pdf",
+            data: base64Pdf,
+          },
+        },
+        { text: prompt },
+      ]);
+
+      // Step 4: Parse Gemini response
+      const raw = result.response.text().trim()
+        .replace(/^```json\n?/, '')
+        .replace(/^```\n?/, '')
+        .replace(/```$/, '')
+        .trim();
+
+      const extractedData = JSON.parse(raw);
+      console.log(`[GEMINI] Extracted:`, extractedData);
+
+      // Step 5: Save extraction to Firestore
+      await db
         .collection("applications")
         .doc(applicationId)
-        .collection("parseResults")
+        .collection("resumeExtraction")
         .add({
-          extractedText: pdfData.text,
-          pageCount: pdfData.numpages,
-          characterCount: pdfData.text.length,
-          resumeUrl: resumeUrl,
-          parsedAt: admin.firestore.FieldValue.serverTimestamp(),
+          ...extractedData,
+          extractedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
 
-      // Step 4: Update the application document with the parse result ID and status
+      // Step 6: Update application status
       await snap.ref.update({
         resumeParsed: true,
-        resumeParseResultId: resultDoc.id,
         resumeParseStatus: "completed",
+        extractionStatus: "completed",
+        matchScore: extractedData.matchScore ?? null,
       });
 
-      console.log(`[TRIGGER] Done. Result stored at: ${resultDoc.id}`);
+      console.log(`[TRIGGER] Done for application: ${applicationId}`);
+
     } catch (error) {
-      // If anything fails, mark the application as parse-failed
       console.error(`[TRIGGER] Error for ${applicationId}:`, error);
       await snap.ref.update({
         resumeParsed: false,
         resumeParseStatus: "failed",
+        extractionStatus: "incomplete",
         resumeParseError: error.message,
       }).catch(() => {});
     }
   });
 
-// Email notification function - updated to handle Shortlisted status (force redeploy)
+// Email notification function
 exports.sendApplicationStatusEmail = onDocumentUpdated(
   {
     document: 'applications/{applicationId}',
     region: 'asia-southeast1'
   },
   async (event) => {
-    const before = event.data.before.data()
-    const after = event.data.after.data()
+    const before = event.data.before.data();
+    const after = event.data.after.data();
 
-    if (!before || !after) return
+    if (!before || !after) return;
 
-    const oldStatus = before.status
-    const newStatus = after.status
+    const oldStatus = before.status;
+    const newStatus = after.status;
 
     const validTransition =
       oldStatus === 'Pending' &&
-      (newStatus === 'Accepted' || newStatus === 'Rejected' || newStatus === 'Shortlisted')
+      (newStatus === 'Accepted' || newStatus === 'Rejected' || newStatus === 'Shortlisted');
 
-    if (!validTransition) return
-    if (after.emailNotificationSent === true) return
+    if (!validTransition) return;
+    if (after.emailNotificationSent === true) return;
 
-    const candidateEmail = after.candidateEmail
-    const candidateName = after.candidateName || 'Applicant'
-    const jobTitle = after.jobTitle || 'the position'
+    const candidateEmail = after.candidateEmail;
+    const candidateName = after.candidateName || 'Applicant';
+    const jobTitle = after.jobTitle || 'the position';
 
-    let subject = ''
-    let html = ''
+    let subject = '';
+    let html = '';
 
     if (newStatus === 'Accepted' || newStatus === 'Shortlisted') {
-      subject = 'Your application has been accepted'
+      subject = 'Your application has been accepted';
       html = `
         <p>Hi ${candidateName},</p>
         <p>We are pleased to inform you that your application for <b>${jobTitle}</b> has been <b>accepted</b>.</p>
         <p>We will contact you with the next steps soon.</p>
         <p>Best regards,<br/>Recruitment Team</p>
-      `
+      `;
     } else {
-      subject = 'Update on your job application'
+      subject = 'Update on your job application';
       html = `
         <p>Hi ${candidateName},</p>
         <p>Thank you for applying for <b>${jobTitle}</b>.</p>
         <p>We would like to let you know that your application was <b>not selected</b> this time.</p>
         <p>We appreciate your interest and wish you all the best.</p>
         <p>Best regards,<br/>Recruitment Team</p>
-      `
+      `;
     }
 
     await admin.firestore().collection('mail').add({
       to: candidateEmail,
       message: { subject, html }
-    })
+    });
 
     await event.data.after.ref.update({
       emailNotificationSent: true
-    })
+    });
   }
-)
+);

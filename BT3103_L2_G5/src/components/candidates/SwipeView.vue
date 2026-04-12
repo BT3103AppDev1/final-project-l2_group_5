@@ -88,15 +88,13 @@
               {{ aiSummary.matchReason }}
             </p>
 
-            <a
+            <button
               v-if="currentCandidate.resumeUrl"
-              :href="currentCandidate.resumeUrl"
-              target="_blank"
-              rel="noopener noreferrer"
+              @click="openResumeModal(currentCandidate.resumeUrl)"
               class="resume-link"
             >
               View Full Resume →
-            </a>
+            </button>
           </article>
         </div>
 
@@ -111,6 +109,19 @@
 
         <p class="keyboard-hint">← Reject | → Shortlist | Space Skip | {{ isMac ? 'Cmd+Z' : 'Ctrl+Z' }} Undo</p>
       </section>
+
+      <!-- Resume Modal -->
+      <div v-if="showResumeModal" class="resume-modal-overlay" @click="closeResumeModal">
+        <div class="resume-modal" @click.stop>
+          <button class="resume-modal-close" @click="closeResumeModal">✕</button>
+          <iframe
+            v-if="modalResumeUrl"
+            :src="modalResumeUrl"
+            class="resume-iframe"
+            title="Full Resume"
+          ></iframe>
+        </div>
+      </div>
     </main>
   </div>
 </template>
@@ -144,6 +155,8 @@ const lastDecision = ref(null)
 const exitLeft = ref(false)
 const exitRight = ref(false)
 const extractionByApplication = ref({})
+const showResumeModal = ref(false)
+const modalResumeUrl = ref(null)
 
 const isSingleJobMode = computed(() => !!route.query.jobId)
 
@@ -156,7 +169,15 @@ const pendingCandidates = computed(() => {
   return allPending.value.filter((c) => c.jobId === selectedJobId.value)
 })
 
-const currentCandidate = computed(() => pendingCandidates.value[0] || null)
+const sortedPendingCandidates = computed(() => {
+  return [...pendingCandidates.value].sort((a, b) => {
+    const scoreA = extractionByApplication.value[a.id]?.matchScore ?? -1
+    const scoreB = extractionByApplication.value[b.id]?.matchScore ?? -1
+    return scoreB - scoreA
+  })
+})
+
+const currentCandidate = computed(() => sortedPendingCandidates.value[0] || null)
 
 const pendingByJob = computed(() => {
   const map = {}
@@ -228,10 +249,10 @@ const matchPillClass = computed(() => {
 })
 
 watch(currentCandidate, (candidate) => {
-  if (candidate && pendingCandidates.value.length > 1) {
-    const nextIdx = pendingCandidates.value.indexOf(candidate) + 1
-    if (nextIdx < pendingCandidates.value.length) {
-      const nextCandidate = pendingCandidates.value[nextIdx]
+  if (candidate && sortedPendingCandidates.value.length > 1) {
+    const nextIdx = sortedPendingCandidates.value.indexOf(candidate) + 1
+    if (nextIdx < sortedPendingCandidates.value.length) {
+      const nextCandidate = sortedPendingCandidates.value[nextIdx]
       prefetchExtraction(nextCandidate.id)
     }
   }
@@ -463,6 +484,18 @@ function skipCandidate() {
     const candidate = allCandidates.value.splice(idx, 1)[0]
     allCandidates.value.push(candidate)
   }
+}
+
+function openResumeModal(resumeUrl) {
+  modalResumeUrl.value = resumeUrl
+  showResumeModal.value = true
+  document.body.style.overflow = 'hidden'
+}
+
+function closeResumeModal() {
+  showResumeModal.value = false
+  modalResumeUrl.value = null
+  document.body.style.overflow = 'auto'
 }
 </script>
 
@@ -733,6 +766,15 @@ function skipCandidate() {
   text-decoration: none;
   font-weight: 700;
   font-size: 17px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
+}
+
+.resume-link:hover {
+  text-decoration: underline;
 }
 
 .decision-bar {
@@ -822,5 +864,81 @@ function skipCandidate() {
   .decision-btn {
     font-size: 18px;
   }
+}
+
+.resume-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.resume-modal {
+  position: relative;
+  width: 90%;
+  max-width: 900px;
+  height: 90vh;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(40px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.resume-modal-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: #f0f2f6;
+  border-radius: 50%;
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1001;
+  color: #1b223a;
+  transition: background-color 0.2s ease;
+}
+
+.resume-modal-close:hover {
+  background-color: #e0e5f2;
+}
+
+.resume-iframe {
+  flex: 1;
+  border: none;
+  border-radius: 0 0 12px 12px;
 }
 </style>

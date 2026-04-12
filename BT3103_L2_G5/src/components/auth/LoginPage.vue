@@ -93,6 +93,22 @@
             Sign In &rarr;
           </button>
 
+          <!-- Google Sign-In (Candidates Only) -->
+          <div v-if="role === 'candidate'" class="google-auth-section">
+            <div class="divider">
+              <span>Or continue with</span>
+            </div>
+            <button class="google-btn" @click="handleGoogleSignIn" type="button" :disabled="isGoogleLoading">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+              </svg>
+              <span>{{ isGoogleLoading ? 'Signing in...' : 'Continue with Google' }}</span>
+            </button>
+          </div>
+
           <p class="signup-prompt">
             Don't have an account?
             <router-link to="/signup" class="signup-link">Sign up</router-link>
@@ -104,9 +120,9 @@
 </template>
 
 <script>
-import { signInWithEmailAndPassword } from 'firebase/auth'
+import { signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth'
 import { getDoc, doc } from 'firebase/firestore'
-import { auth, db } from '@/firebaseConfig'
+import { auth, db, googleProvider } from '@/firebaseConfig'
 import { useRouter } from 'vue-router'
 
 export default {
@@ -123,6 +139,7 @@ export default {
       password: '',
       showPassword: false,
       isLoading: false,
+      isGoogleLoading: false,
     }
   },
   methods: {
@@ -170,6 +187,52 @@ export default {
         }
       } finally {
         this.isLoading = false
+      }
+    },
+    async handleGoogleSignIn() {
+      if (this.role !== 'candidate') {
+        alert('Google sign-in is only available for candidates.')
+        return
+      }
+
+      this.isGoogleLoading = true
+      try {
+        const userCredential = await signInWithPopup(auth, googleProvider)
+        const user = userCredential.user
+
+        // Fetch user's own data from Firestore
+        const userRef = doc(db, 'users', user.uid)
+        const userSnapshot = await getDoc(userRef)
+
+        if (userSnapshot.exists()) {
+          const userData = userSnapshot.data()
+
+          // Validate that user role is candidate
+          if (userData.role !== 'candidate') {
+            alert(`Error: This account is registered as a ${userData.role === 'hr' ? 'HR' : 'Candidate'} user. Please sign in with the correct portal.`)
+            this.isGoogleLoading = false
+            return
+          }
+
+          console.log('User signed in with Google:', userData)
+          alert('Signed in successfully as Candidate')
+          this.router.push('/candidate-dashboard')
+        } else {
+          alert('User profile not found. Please sign up first.')
+        }
+      } catch (error) {
+        console.error('Google sign in error:', error.message)
+
+        // Handle specific Firebase auth errors
+        if (error.code === 'auth/popup-closed-by-user') {
+          console.log('Sign in cancelled by user')
+        } else if (error.code === 'auth/network-request-failed') {
+          alert('Network error. Please check your connection and try again.')
+        } else {
+          alert(`Sign in failed: ${error.message}`)
+        }
+      } finally {
+        this.isGoogleLoading = false
       }
     }
   }
@@ -512,4 +575,71 @@ export default {
 }
 
 .signup-link:hover { text-decoration: underline; }
+
+.google-auth-section {
+  margin-top: 24px;
+}
+
+.divider {
+  position: relative;
+  text-align: center;
+  margin-bottom: 16px;
+  font-size: 0.85rem;
+  color: #9ca3af;
+}
+
+.divider::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: #e5e7eb;
+  z-index: 0;
+}
+
+.divider span {
+  position: relative;
+  background: #fff;
+  padding: 0 12px;
+  z-index: 1;
+}
+
+.google-btn {
+  width: 100%;
+  padding: 12px;
+  background: #fff;
+  border: 1.5px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-family: 'DM Sans', sans-serif;
+  color: #374151;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition: all 0.2s;
+}
+
+.google-btn:hover:not(:disabled) {
+  background: #f9fafb;
+  border-color: #1a237e;
+}
+
+.google-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.google-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.google-btn svg {
+  width: 20px;
+  height: 20px;
+}
 </style>

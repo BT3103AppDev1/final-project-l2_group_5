@@ -99,10 +99,17 @@ export default {
     }
   },
   methods: {
+    // Programmatically opens the hidden file input when the upload box is clicked
     triggerFilePicker() {
       this.$refs.fileInput.click()
     },
 
+    // Central validation method called by both the file-picker and the drag-and-drop handler.
+    // Validates that the file is a PDF (checked by MIME type and extension) and
+    // is within the 10 MB size limit. Clears the input on failure to allow re-selection.
+    // `resetInput` should be true when triggered from the <input> change event so that
+    // the browser's file input value is cleared (required on some browsers to allow
+    // re-selecting the same file after rejection).
     validateAndStoreFile(file, resetInput = false) {
       if (!file) {
         this.resumeFile = null
@@ -159,6 +166,9 @@ export default {
       this.validateAndStoreFile(file)
     },
 
+    // Validates that a resume has been attached, then emits 'submit-application'
+    // with the form payload to the parent (CandidateDashboard) which handles
+    // the actual Firestore write and Storage upload.
     submitForm() {
       if (!this.resumeFile) {
         alert('Please upload your resume in PDF format.')

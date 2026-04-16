@@ -46,14 +46,16 @@ exports.onApplicationCreated = functions
       const base64Pdf = pdfBuffer.toString("base64");
       console.log(`[TRIGGER] PDF downloaded, size: ${pdfBuffer.length} bytes`);
 
-      // Step 2: Fetch job description from Firestore
+      // Step 2: Fetch job description and requirements from Firestore
       const jobId = applicationData.jobId;
       let jobDescription = "Not provided";
+      let jobRequirements = "Not provided";
       if (jobId) {
         const jobDoc = await db.collection("jobs").doc(jobId).get();
         if (jobDoc.exists) {
           jobDescription = jobDoc.data().description || "Not provided";
-          console.log(`[TRIGGER] Job description fetched for jobId: ${jobId}`);
+          jobRequirements = jobDoc.data().requirements || "Not provided";
+          console.log(`[TRIGGER] Job description and requirements fetched for jobId: ${jobId}`);
         }
       }
 
@@ -61,10 +63,13 @@ exports.onApplicationCreated = functions
       const genAI = new GoogleGenerativeAI(functions.config().gemini.key);
       const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-      const prompt = `You are an expert resume parser and job fit assessor. Extract information from the attached resume PDF and evaluate it against the job description below. Return a single JSON object.
+      const prompt = `You are an expert resume parser and job fit assessor. Extract information from the attached resume PDF and evaluate it against the job description and requirements below. Return a single JSON object.
 
 JOB DESCRIPTION:
 ${jobDescription}
+
+JOB REQUIREMENTS:
+${jobRequirements}
 
 TODAY'S DATE: ${new Date().toISOString().split('T')[0]}
 
@@ -75,7 +80,7 @@ FIELDS TO EXTRACT:
 - primarySkills: Array of top 5 recruiter-friendly skills. Prefer technologies, tools, domain expertise, programming languages. No generic tasks like "communication" or "reporting".
 - experienceSummary: Max 3 sentences. Summarise the candidate's most relevant work experience in plain English. Mention current/recent role, key achievements, and relevant background.
 - educationSummary: Max 2 sentences. State the highest qualification and institution. Example: "Bachelor of Science in Marketing, UC Berkeley."
-- matchScore: Integer 0-100. How well does this resume match the job description? Consider relevant skills, experience, industry background, and qualifications. Be realistic. 70+ = strong, 40-69 = partial, below 40 = weak.
+- matchScore: Integer 0-100. How well does this resume match the job description and requirements? Consider relevant skills, experience, industry background, and qualifications. Be realistic. 70+ = strong, 40-69 = partial, below 40 = weak.
 - matchReason: 1-2 sentences explaining the match score. Mention key strengths and any gaps.
 
 If a field cannot be determined, use:

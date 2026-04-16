@@ -60,6 +60,10 @@ export default {
     }
   },
   methods: {
+    // Sends a Firebase password reset email to the entered address.
+    // Sets `sent` to true on success to disable the button and show confirmation.
+    // Errors are caught generically — Firebase intentionally does not reveal
+    // whether the email is registered (security best practice).
     async sendReset() {
       if (!this.email) {
         this.error = 'Please enter your email address.'

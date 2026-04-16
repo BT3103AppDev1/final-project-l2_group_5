@@ -271,6 +271,8 @@ export default {
     }
   },
   computed: {
+    // Extracts unique location values from loaded jobs for the location filter dropdown.
+    // 'All Locations' is prepended as the default/unfiltered option.
     locations() {
       const uniqueLocations = new Set()
       this.jobs.forEach((job) => {
@@ -280,6 +282,7 @@ export default {
       })
       return ['All Locations', ...Array.from(uniqueLocations).sort()]
     },
+    // Extracts unique department values from loaded jobs for the department filter dropdown
     departments() {
       const set = new Set()
       this.jobs.forEach(job => {
@@ -287,6 +290,7 @@ export default {
       })
     return ['All Departments', ...Array.from(set).sort()]
   },
+  // Extracts unique employment type values from loaded jobs for the type filter dropdown
   empTypes() {
     const set = new Set()
     this.jobs.forEach(job => {
@@ -294,6 +298,8 @@ export default {
     })
   return ['All Types', ...Array.from(set).sort()]
 },
+    // Returns only active jobs that match all active filters (search query, department,
+    // location, employment type). An unset filter uses the 'All X' sentinel value.
     filteredJobs() {
       return this.jobs.filter((job) => {
         const q = (this.searchQuery || '').trim().toLowerCase()
@@ -396,6 +402,12 @@ export default {
         console.error('Error fetching applications:', error)
       }
     },
+    // Handles the full application submission flow:
+    // 1. Uploads the resume PDF to Firebase Storage at resumes/{uid}/{jobId}-{timestamp}-{filename}
+    // 2. Creates an application document in Firestore with all candidate and job metadata
+    // 3. Increments the job's totalApplicants counter (best-effort, non-blocking)
+    // The modal is closed before the post-submit fetch to prevent double submissions
+    // if the user clicks while the request is still in flight.
     async submitApplicationForm(formData) {
       if (!this.selectedJob) {
         alert('No job selected.')

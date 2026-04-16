@@ -1,4 +1,4 @@
-ƒ<template>
+<template>
   <div class="candidates-layout">
 
     <!-- Sidebar (matches HRDashboard) -->
@@ -218,7 +218,9 @@ const jobTitle   = ref('')
 
 // ── Lifecycle ──
 onMounted(() => {
-  // 👈 1. Wait for Firebase to confirm the user is logged in
+  // Wait for Firebase Auth to confirm the current session.
+  // Passes the authenticated user's uid to fetchCandidates so the
+  // Firestore query includes hrId — required by security rules.
   onAuthStateChanged(auth, async (user) => {
     if (!user) {
       router.push('/login')
@@ -260,41 +262,45 @@ async function fetchCandidates(jobId, userId) {
 }
 
 async function updateStatus(applicationId, newStatus) {
+  // Lock the row to prevent double-clicks while the update is in flight
   processing.value = applicationId
   try {
     const candidateIdx = candidates.value.findIndex(c => c.id === applicationId)
     if (candidateIdx === -1) return
-    
+
     const candidate = candidates.value[candidateIdx]
     const previousStatus = candidate.status
     const jobId = candidate.jobId
-    
-    // Update application
+
+    // Persist the new status on the application document
     await updateDoc(doc(db, 'applications', applicationId), { status: newStatus })
-    
-    // Update job counters with safety checks
+
+    // Sync shortlistedCount / rejectedCount counters on the job document.
+    // Read current values first and guard with Math.max(0, ...) to prevent
+    // negative counts if the document state is out of sync.
     const jobRef = doc(db, 'jobs', jobId)
     const jobSnap = await getDoc(jobRef)
     const jobData = jobSnap.data() || {}
-    
+
     const counterUpdates = {}
-    // Safely decrement from previous status
+    // Decrement the counter for the previous status
     if (previousStatus === 'Shortlisted') {
       counterUpdates.shortlistedCount = Math.max(0, (jobData.shortlistedCount || 0) - 1)
     } else if (previousStatus === 'Rejected') {
       counterUpdates.rejectedCount = Math.max(0, (jobData.rejectedCount || 0) - 1)
     }
-    // Increment new status
+    // Increment the counter for the new status
     if (newStatus === 'Shortlisted') {
       counterUpdates.shortlistedCount = (jobData.shortlistedCount || 0) + 1
     } else if (newStatus === 'Rejected') {
       counterUpdates.rejectedCount = (jobData.rejectedCount || 0) + 1
     }
-    
+
     if (Object.keys(counterUpdates).length > 0) {
       await updateDoc(jobRef, counterUpdates)
     }
-    
+
+    // Update local reactive state so the UI reflects the change instantly
     candidates.value[candidateIdx].status = newStatus
   } catch (e) {
     console.error('Error updating status:', e)

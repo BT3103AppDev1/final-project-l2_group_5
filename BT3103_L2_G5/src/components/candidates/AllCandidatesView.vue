@@ -216,10 +216,12 @@ const userName       = ref('HR User')
 const userInitials   = ref('HR')
 
 onMounted(() => {
+  // Wait for Firebase Auth to confirm the current session before fetching data.
+  // All Firestore queries are scoped to user.uid (hrId) to satisfy security rules.
   onAuthStateChanged(auth, async (user) => {
     if (!user) { router.push('/login'); return }
 
-    // Fetch user name
+    // Fetch the HR user's display name for the sidebar avatar
     const snap = await getDoc(doc(db, 'users', user.uid))
     if (snap.exists()) {
       const data = snap.data()
@@ -227,7 +229,8 @@ onMounted(() => {
       userInitials.value = data.fullName?.split(' ').map(w => w[0]).slice(0,2).join('') || 'HR'
     }
 
-    // Fetch jobs to build jobTitles map
+    // Build a jobId → title lookup map so we can display job titles in the candidate list
+    // without embedding the title in each application document
     const jobsSnap = await getDocs(
       query(collection(db, 'jobs'), where('hrId', '==', user.uid))
     )
@@ -246,41 +249,45 @@ onMounted(() => {
 })
 
 async function updateStatus(applicationId, newStatus) {
+  // Lock the row being updated to prevent duplicate clicks
   processing.value = applicationId
   try {
     const candidateIdx = candidates.value.findIndex(c => c.id === applicationId)
     if (candidateIdx === -1) return
-    
+
     const candidate = candidates.value[candidateIdx]
     const previousStatus = candidate.status
     const jobId = candidate.jobId
-    
-    // Update application
+
+    // Update the application document with the new status
     await updateDoc(doc(db, 'applications', applicationId), { status: newStatus })
-    
-    // Update job counters with safety checks
+
+    // Sync the shortlistedCount / rejectedCount counters on the parent job document.
+    // We read the current values first and use Math.max(0, ...) to prevent
+    // counters going negative if the document is out-of-sync.
     const jobRef = doc(db, 'jobs', jobId)
     const jobSnap = await getDoc(jobRef)
     const jobData = jobSnap.data() || {}
-    
+
     const counterUpdates = {}
-    // Safely decrement from previous status
+    // Decrement the counter for the status we are moving away from
     if (previousStatus === 'Shortlisted') {
       counterUpdates.shortlistedCount = Math.max(0, (jobData.shortlistedCount || 0) - 1)
     } else if (previousStatus === 'Rejected') {
       counterUpdates.rejectedCount = Math.max(0, (jobData.rejectedCount || 0) - 1)
     }
-    // Increment new status
+    // Increment the counter for the new status
     if (newStatus === 'Shortlisted') {
       counterUpdates.shortlistedCount = (jobData.shortlistedCount || 0) + 1
     } else if (newStatus === 'Rejected') {
       counterUpdates.rejectedCount = (jobData.rejectedCount || 0) + 1
     }
-    
+
     if (Object.keys(counterUpdates).length > 0) {
       await updateDoc(jobRef, counterUpdates)
     }
-    
+
+    // Update local state immediately so the UI reflects the change without a re-fetch
     candidates.value[candidateIdx].status = newStatus
   } catch (e) {
     console.error('Error updating status:', e)
@@ -304,10 +311,13 @@ function formatDate(ts) {
 function handleLogout() { showLogoutModal.value = true }
 async function confirmLogout() { await signOut(auth); router.push('/login') }
 
+// ── Computed ──
+// Summary counts used by the stats cards and the "Screen Candidates" button badge
 const pendingCount     = computed(() => candidates.value.filter(c => c.status === 'Pending').length)
 const shortlistedCount = computed(() => candidates.value.filter(c => c.status === 'Shortlisted').length)
 const rejectedCount    = computed(() => candidates.value.filter(c => c.status === 'Rejected').length)
 
+// Count for each tab label badge
 const tabCounts = computed(() => ({
   All: candidates.value.length,
   Pending: pendingCount.value,
@@ -315,6 +325,7 @@ const tabCounts = computed(() => ({
   Rejected: rejectedCount.value,
 }))
 
+// Returns only the candidates matching the active tab filter
 const filteredCandidates = computed(() => {
   if (activeTab.value === 'All') return candidates.value
   return candidates.value.filter(c => c.status === activeTab.value)

@@ -301,6 +301,25 @@ function handleKeydown(e) {
   }
 }
 
+// ── Resume Extraction Loading Strategy ──
+// AI-extracted resume data is stored in a Firestore subcollection:
+//   applications/{appId}/resumeExtraction  (written by a Cloud Function after upload)
+//
+// Three functions handle loading this data at different points in the lifecycle:
+//   1. batchLoadExtractions — called once on mount; pre-loads all candidates in parallel
+//      so the first card and all subsequent cards have data ready immediately.
+//   2. prefetchExtraction   — called by a watcher on currentCandidate; fetches the
+//      NEXT candidate's data while the HR user is reviewing the current card (look-ahead).
+//   3. loadLatestExtraction — utility function; single-candidate fetch with fallback,
+//      available if a specific candidate's data needs to be loaded on demand.
+//
+// All three use a two-step query strategy:
+//   Step 1: orderBy('extractedAt', 'desc') + limit(1)  — fast path, requires a Firestore index
+//   Step 2: fetch all docs + sort in JS               — fallback if the index doesn't exist
+//           or if the ordered query returns empty
+
+// Fetches AI extraction data for all candidates in parallel at page load.
+// Uses Promise.all for maximum throughput. Skips candidates already in the cache.
 async function batchLoadExtractions(applicationIds) {
   if (!applicationIds.length) return
   try {
@@ -369,6 +388,8 @@ async function batchLoadExtractions(applicationIds) {
   }
 }
 
+// Silently pre-fetches the extraction for the next candidate while the HR user
+// is still reviewing the current card. Skips if data is already cached.
 async function prefetchExtraction(applicationId) {
   if (!applicationId || extractionByApplication.value[applicationId]) return
   try {
@@ -402,6 +423,9 @@ async function prefetchExtraction(applicationId) {
   }
 }
 
+// On-demand single-candidate extraction loader, available as a fallback if
+// a candidate's data was missed by the batch load (e.g., late application).
+// Skips silently if data is already in the cache.
 async function loadLatestExtraction(applicationId) {
   if (!applicationId || extractionByApplication.value[applicationId]) return
   try {
@@ -433,6 +457,9 @@ async function loadLatestExtraction(applicationId) {
   }
 }
 
+// Records a Shortlist or Reject decision for the current candidate.
+// Triggers the card exit animation (slide left/right) before updating Firestore,
+// so the UI feels responsive. Saves the decision in lastDecision to enable undo.
 async function decide(newStatus) {
   if (!currentCandidate.value || processing.value) return
   processing.value = true
@@ -477,6 +504,8 @@ async function undoLast() {
   }
 }
 
+// Moves the current candidate to the end of the list without making a decision.
+// Implemented by splicing from the array and pushing to the back.
 function skipCandidate() {
   if (!currentCandidate.value || processing.value) return
   const idx = allCandidates.value.findIndex((c) => c.id === currentCandidate.value.id)

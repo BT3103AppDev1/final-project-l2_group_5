@@ -247,6 +247,7 @@ export default {
     }
   },
   computed: {
+    // Summary counts for the stats cards at the top of the page
     pendingCount() {
       return this.applications.filter(app => app.status === 'Pending').length
     },
@@ -256,6 +257,8 @@ export default {
     rejectedCount() {
       return this.applications.filter(app => app.status === 'Rejected').length
     },
+    // Applies active status filter and search query, then sorts by most recent first.
+    // Falls back gracefully if createdAt is missing (returns 0 timestamp).
     filteredApplications() {
       let filtered = [...this.applications]
 
@@ -289,6 +292,8 @@ export default {
     }
   },
   methods: {
+    // Fetches all applications submitted by the currently logged-in candidate,
+    // scoped by candidateId to satisfy Firestore security rules.
     async fetchApplications() {
       if (!this.user?.uid) return
 
@@ -310,6 +315,9 @@ export default {
       }
     },
 
+    // Fetches all jobs and builds a jobId → job object map (jobsMap).
+    // This is used to look up job titles when the application document
+    // does not store the title inline (older applications may lack jobTitle).
     async fetchJobs() {
       try {
         const snapshot = await getDocs(collection(db, 'jobs'))
@@ -367,6 +375,9 @@ export default {
         this.expandedApplicationId === applicationId ? null : applicationId
     },
 
+    // Permanently deletes the application document from Firestore after confirmation.
+    // Also clears the expanded view if the withdrawn application was open.
+    // Only available for Pending applications (HR-decided ones cannot be withdrawn).
     async withdrawApplication(applicationId) {
       const confirmed = window.confirm(
         'Are you sure you want to withdraw this application?'
@@ -389,6 +400,8 @@ export default {
       }
     },
 
+    // Opens the resume PDF in a full-screen modal iframe.
+    // Scroll is locked on the body while the modal is open.
     openResumeModal(resumeUrl) {
       this.modalResumeUrl = resumeUrl
       this.showResumeModal = true
@@ -404,6 +417,9 @@ export default {
   mounted() {
     const auth = getAuth()
 
+    // Wait for Firebase Auth to resolve before loading data.
+    // fetchJobs is called first so the jobsMap is ready when
+    // fetchApplications resolves and the list renders.
     onAuthStateChanged(auth, async currentUser => {
       if (!currentUser) {
         this.loading = false
